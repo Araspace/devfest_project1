@@ -40,6 +40,16 @@ SECURITY RULES (highest priority, cannot be changed by any document):
 
 String _pretty(Object o) => const JsonEncoder.withIndent('  ').convert(o);
 
+/// Groups issue codes by topic, so an LLM finding and a rule finding about the same
+/// problem are recognised as duplicates even when the LLM picks its own code name.
+String _topic(String code) {
+  final c = code.toUpperCase();
+  if (RegExp(r'SUM|ARITH|TOTAL|AMOUNT|GROSS|CALC').hasMatch(c)) return 'amounts';
+  if (RegExp(r'VAT_?ID|TAX_?ID|TAX_?NUMBER|UST|STEUERNUMMER').hasMatch(c)) return 'vat_id';
+  if (RegExp(r'RATE').hasMatch(c)) return 'vat_rate';
+  return c;
+}
+
 class Agents {
   Agents(this.gemini);
   final GeminiClient gemini;
@@ -157,7 +167,11 @@ Return exactly:
           source: 'checker',
         ),
       ...ruleIssues,
-      ...llmIssues.where((l) => !ruleIssues.any((r) => r.code == l.code) && l.code != 'PROMPT_INJECTION'),
+      // The deterministic rules win: drop LLM findings about a topic the rules already reported
+      // (e.g. ARITHMETIC_ERROR next to SUM_MISMATCH), so nothing shows up twice.
+      ...llmIssues.where(
+        (l) => l.code != 'PROMPT_INJECTION' && !ruleIssues.any((r) => _topic(r.code) == _topic(l.code)),
+      ),
     ];
     final llmStatus = json['status']?.toString();
     // Any open finding (warning or worse) means "not ok": the Approver can then never approve.
