@@ -93,7 +93,7 @@ class _HomePageState extends State<HomePage> {
       _set(i, StepState.running, 'Reading the document…');
       final sw = Stopwatch()..start();
       String took() {
-        final t = '${(sw.elapsedMilliseconds / 1000).toStringAsFixed(1)} s';
+        final t = '${(sw.elapsedMilliseconds / 1000).toStringAsFixed(1)} s, ${GeminiClient.lastModel ?? '?'}';
         sw.reset();
         return t;
       }

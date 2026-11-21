@@ -41,11 +41,21 @@ class GeminiClient {
   final String model;
 
   /// Tried in order when the chosen model is overloaded or hangs. Gemini capacity
-  /// varies a lot per model; during the DevFest 3.7/3.8-flash were often unavailable.
-  static const fallbackModels = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
+  /// varies a lot per model and minute; during the DevFest the big Flash models
+  /// regularly hung while the Lite models still answered in a few seconds.
+  static const fallbackModels = [
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
+    'gemini-3.1-flash-lite',
+    'gemini-3.5-flash-lite',
+    'gemini-flash-lite-latest',
+  ];
 
-  /// Model that answered the last request (may differ from [model] after a fallback).
-  String? lastModel;
+  /// Model that answered the last request. Shared by all clients so the next agent
+  /// starts with a model that is known to work instead of waiting on a busy one again.
+  static String? lastModel;
+
+  static const _timeout = Duration(seconds: 25);
 
   /// Sends one request with a fixed system instruction and returns the parsed
   /// JSON object the model produced.
@@ -79,7 +89,7 @@ class GeminiClient {
 
     // Overloaded models either answer 503 or simply hang. Instead of waiting, move on
     // to the next model quickly.
-    final models = [model, ...fallbackModels.where((m) => m != model)];
+    final models = {?lastModel, model, ...fallbackModels}.toList();
     http.Response? res;
     final problems = <String>[];
     for (final m in models) {
@@ -91,10 +101,10 @@ class GeminiClient {
               .post(uri,
                   headers: {'Content-Type': 'application/json', 'x-goog-api-key': apiKey},
                   body: jsonEncode(body(m, thinkingLevel)))
-              .timeout(const Duration(seconds: 40));
+              .timeout(_timeout);
         } on TimeoutException {
           res = null;
-          problems.add('$m: no answer within 40 s');
+          problems.add('$m: no answer within ${_timeout.inSeconds} s');
           break;
         } catch (e) {
           res = null;
