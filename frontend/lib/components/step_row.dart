@@ -23,13 +23,13 @@ class StepRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (bg, fg, badge) = switch (step.state) {
-      FlowState.idle => (Brand.cream, Brand.muted, null),
-      FlowState.running => (Brand.purpleSoft, Brand.purple, null),
-      FlowState.done => (Brand.purpleSoft, Brand.purple, Icons.check_circle),
-      FlowState.warning => (Brand.orangeSoft, Brand.orangeDark, Icons.warning_rounded),
-      FlowState.waiting => (Brand.orangeSoft, Brand.orangeDark, Icons.hourglass_top_rounded),
-      FlowState.failed => (const Color(0xFFFEE2E2), Brand.red, Icons.cancel),
-      FlowState.skipped => (Brand.cream, Brand.muted, Icons.remove_circle_outline),
+      FlowState.idle => (Brand.paper, Brand.muted, null),
+      FlowState.running => (Brand.accentSoft, Brand.accent, null),
+      FlowState.done => (Brand.okSoft, Brand.ok, Icons.check_circle),
+      FlowState.warning => (Brand.warnSoft, Brand.warn, Icons.warning_rounded),
+      FlowState.waiting => (Brand.warnSoft, Brand.warn, Icons.hourglass_top_rounded),
+      FlowState.failed => (Brand.dangerSoft, Brand.danger, Icons.cancel),
+      FlowState.skipped => (Brand.paper, Brand.muted, Icons.remove_circle_outline),
     };
     return IntrinsicHeight(
       child: Row(
@@ -41,15 +41,15 @@ class StepRow extends StatelessWidget {
                 clipBehavior: Clip.none,
                 children: [
                   Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
                     child: step.state == FlowState.running
                         ? const Padding(
-                            padding: EdgeInsets.all(14),
-                            child: CircularProgressIndicator(strokeWidth: 2.5, color: Brand.purple),
+                            padding: EdgeInsets.all(10),
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Brand.accent),
                           )
-                        : Icon(step.icon, color: step.state == FlowState.idle ? Brand.muted : Brand.purple),
+                        : Icon(step.icon, color: fg, size: 18),
                   ),
                   if (badge != null)
                     Positioned(

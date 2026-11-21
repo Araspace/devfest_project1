@@ -13,17 +13,21 @@ class RecommendationBox extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = recommendation;
     final label = switch (r.decision) {
-      'approve' => 'Approver agent recommends: approve',
-      'reject' => 'Approver agent recommends: reject',
-      _ => 'Approver agent recommends: human review',
+      'approve' => 'Approver agent: approve',
+      'reject' => 'Approver agent: reject',
+      _ => 'Approver agent: needs human review',
     };
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Brand.purpleSoft, borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(
+        color: Brand.accentSoft,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Brand.line),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.auto_awesome, color: Brand.purple, size: 20),
+          const Icon(Icons.fact_check_outlined, color: Brand.accent, size: 18),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

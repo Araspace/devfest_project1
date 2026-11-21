@@ -48,19 +48,19 @@ class _ArchiveCardState extends State<ArchiveCard> {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(28),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Icon(Icons.inventory_2_outlined, color: Brand.purple),
+                const Icon(Icons.inventory_2_outlined),
                 const SizedBox(width: 10),
-                Expanded(child: Text('Receipt archive', style: headline(22))),
+                Expanded(child: Text('Receipt archive', style: headline(17))),
                 if (!empty)
                   TextButton.icon(
                     onPressed: () => widget.onExcel(items),
-                    icon: const Icon(Icons.download_rounded, color: Brand.purple),
+                    icon: const Icon(Icons.download_rounded, color: Brand.accent),
                     label: const Text('Excel', style: TextStyle(color: Brand.ink)),
                   ),
               ],
@@ -86,11 +86,11 @@ class _ArchiveCardState extends State<ArchiveCard> {
               const SizedBox(height: 20),
               Row(
                 children: [
-                  const Icon(Icons.folder_outlined, size: 18, color: Brand.orangeDark),
+                  const Icon(Icons.folder_outlined, size: 16, color: Brand.muted),
                   const SizedBox(width: 6),
                   Text(
                     entry.key,
-                    style: const TextStyle(fontWeight: FontWeight.w700, color: Brand.orangeDark),
+                    style: const TextStyle(fontWeight: FontWeight.w600, color: Brand.ink),
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -135,7 +135,7 @@ class _ArchiveCardState extends State<ArchiveCard> {
           IconButton(
             tooltip: c.hasOriginal ? 'Download original' : 'Original file not stored',
             onPressed: c.hasOriginal ? () => Archive.downloadOriginal(c) : null,
-            icon: const Icon(Icons.file_download_outlined, color: Brand.purple),
+            icon: const Icon(Icons.file_download_outlined, color: Brand.accent),
           ),
           IconButton(
             tooltip: 'Remove from archive',

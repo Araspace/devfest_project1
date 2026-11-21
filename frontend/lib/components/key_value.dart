@@ -26,7 +26,7 @@ class KeyValue extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               v ?? 'missing',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: v == null ? Brand.red : Brand.ink),
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: v == null ? Brand.danger : Brand.ink),
             ),
           ],
         ),

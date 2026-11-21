@@ -25,7 +25,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: Colors.white,
-      title: Text('Settings', style: headline(22)),
+      title: Text('Settings', style: headline(17)),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -43,7 +43,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
             const SizedBox(height: 20),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              activeThumbColor: Brand.orange,
+              activeThumbColor: Brand.accent,
               title: const Text('Let the Approver agent decide'),
               subtitle: const Text(
                 'Clear cases are approved or rejected automatically. Unclear ones still come to you.',
