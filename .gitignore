@@ -30,8 +30,8 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
-/coverage/
+build/
+coverage/
 
 # Symbolication related
 app.*.symbols
@@ -50,3 +50,6 @@ app.*.map.json
 # Local secrets (Gemini API key) – never commit
 .env
 .env.*
+
+# Backend audit log (runtime data)
+audit_log.jsonl

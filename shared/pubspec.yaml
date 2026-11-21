@@ -1,0 +1,7 @@
+name: belegguard_shared
+description: Data models shared by the BelegGuard backend and frontend.
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: ^3.9.0

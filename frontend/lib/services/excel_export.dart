@@ -2,7 +2,7 @@
 
 import 'package:excel/excel.dart';
 
-import 'models.dart';
+import 'package:belegguard_shared/models.dart';
 
 class ExcelExport {
   static String _ts(DateTime d) => d.toIso8601String().substring(0, 19).replaceFirst('T', ' ');
@@ -15,9 +15,24 @@ class ExcelExport {
     final s = excel['Buchungen'];
 
     final header = [
-      'Belegdatum', 'Rechnungsnr.', 'Lieferant', 'USt-IdNr.', 'Netto', 'USt-Satz %', 'USt', 'Brutto',
-      'Konto (Soll)', 'Kontoname', 'Gegenkonto (Haben)', 'BU-Schlüssel', 'Buchungstext',
-      'Prüfstatus', 'Hinweise', 'Freigegeben am', 'Freigegeben von', 'Datei',
+      'Belegdatum',
+      'Rechnungsnr.',
+      'Lieferant',
+      'USt-IdNr.',
+      'Netto',
+      'USt-Satz %',
+      'USt',
+      'Brutto',
+      'Konto (Soll)',
+      'Kontoname',
+      'Gegenkonto (Haben)',
+      'BU-Schlüssel',
+      'Buchungstext',
+      'Prüfstatus',
+      'Hinweise',
+      'Freigegeben am',
+      'Freigegeben von',
+      'Datei',
     ];
     s.appendRow(header.map((h) => TextCellValue(h)).toList());
 
@@ -50,9 +65,19 @@ class ExcelExport {
     }
 
     final a = excel['Audit-Log'];
-    a.appendRow([TextCellValue('Zeit'), TextCellValue('Akteur'), TextCellValue('Ereignis'), TextCellValue('Begründung')]);
+    a.appendRow([
+      TextCellValue('Zeit'),
+      TextCellValue('Akteur'),
+      TextCellValue('Ereignis'),
+      TextCellValue('Begründung'),
+    ]);
     for (final e in log) {
-      a.appendRow([TextCellValue(_ts(e.at)), TextCellValue(e.actor), TextCellValue(e.message), TextCellValue(e.detail ?? '')]);
+      a.appendRow([
+        TextCellValue(_ts(e.at)),
+        TextCellValue(e.actor),
+        TextCellValue(e.message),
+        TextCellValue(e.detail ?? ''),
+      ]);
     }
 
     final name = 'BelegGuard_${DateTime.now().toIso8601String().substring(0, 10)}.xlsx';

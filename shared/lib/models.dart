@@ -66,44 +66,44 @@ class InvoiceData {
   final String reasoning;
 
   factory InvoiceData.fromJson(Map<String, dynamic> j) => InvoiceData(
-        supplierName: _toStr(j['supplier_name']),
-        supplierAddress: _toStr(j['supplier_address']),
-        recipientName: _toStr(j['recipient_name']),
-        recipientAddress: _toStr(j['recipient_address']),
-        vatId: _toStr(j['vat_id']),
-        taxNumber: _toStr(j['tax_number']),
-        invoiceNumber: _toStr(j['invoice_number']),
-        invoiceDate: _toStr(j['invoice_date']),
-        deliveryDate: _toStr(j['delivery_date']),
-        description: _toStr(j['description']),
-        currency: _toStr(j['currency']) ?? 'EUR',
-        net: _toDouble(j['net']),
-        vat: _toDouble(j['vat']),
-        gross: _toDouble(j['gross']),
-        vatRate: _toDouble(j['vat_rate']),
-        rawText: _toStr(j['raw_text']) ?? '',
-        suspiciousText: _toStrList(j['suspicious_text']),
-        reasoning: _toStr(j['reasoning']) ?? '',
-      );
+    supplierName: _toStr(j['supplier_name']),
+    supplierAddress: _toStr(j['supplier_address']),
+    recipientName: _toStr(j['recipient_name']),
+    recipientAddress: _toStr(j['recipient_address']),
+    vatId: _toStr(j['vat_id']),
+    taxNumber: _toStr(j['tax_number']),
+    invoiceNumber: _toStr(j['invoice_number']),
+    invoiceDate: _toStr(j['invoice_date']),
+    deliveryDate: _toStr(j['delivery_date']),
+    description: _toStr(j['description']),
+    currency: _toStr(j['currency']) ?? 'EUR',
+    net: _toDouble(j['net']),
+    vat: _toDouble(j['vat']),
+    gross: _toDouble(j['gross']),
+    vatRate: _toDouble(j['vat_rate']),
+    rawText: _toStr(j['raw_text']) ?? '',
+    suspiciousText: _toStrList(j['suspicious_text']),
+    reasoning: _toStr(j['reasoning']) ?? '',
+  );
 
   /// Fields shown to the next agents and the user (raw text excluded).
   Map<String, dynamic> toJson() => {
-        'supplier_name': supplierName,
-        'supplier_address': supplierAddress,
-        'recipient_name': recipientName,
-        'recipient_address': recipientAddress,
-        'vat_id': vatId,
-        'tax_number': taxNumber,
-        'invoice_number': invoiceNumber,
-        'invoice_date': invoiceDate,
-        'delivery_date': deliveryDate,
-        'description': description,
-        'currency': currency,
-        'net': net,
-        'vat': vat,
-        'gross': gross,
-        'vat_rate': vatRate,
-      };
+    'supplier_name': supplierName,
+    'supplier_address': supplierAddress,
+    'recipient_name': recipientName,
+    'recipient_address': recipientAddress,
+    'vat_id': vatId,
+    'tax_number': taxNumber,
+    'invoice_number': invoiceNumber,
+    'invoice_date': invoiceDate,
+    'delivery_date': deliveryDate,
+    'description': description,
+    'currency': currency,
+    'net': net,
+    'vat': vat,
+    'gross': gross,
+    'vat_rate': vatRate,
+  };
 }
 
 enum Severity { info, warning, error, critical }
@@ -116,16 +116,18 @@ class Issue {
   final String source; // 'rules' | 'guard' | 'checker'
 
   factory Issue.fromJson(Map<String, dynamic> j) => Issue(
-        _toStr(j['code']) ?? 'CHECK',
-        switch ((_toStr(j['severity']) ?? 'warning').toLowerCase()) {
-          'info' => Severity.info,
-          'error' => Severity.error,
-          'critical' => Severity.critical,
-          _ => Severity.warning,
-        },
-        _toStr(j['message']) ?? '',
-        source: 'checker',
-      );
+    _toStr(j['code']) ?? 'CHECK',
+    switch ((_toStr(j['severity']) ?? 'warning').toLowerCase()) {
+      'info' => Severity.info,
+      'error' => Severity.error,
+      'critical' => Severity.critical,
+      _ => Severity.warning,
+    },
+    _toStr(j['message']) ?? '',
+    source: _toStr(j['source']) ?? 'checker',
+  );
+
+  Map<String, dynamic> toJson() => {'code': code, 'severity': severity.name, 'message': message, 'source': source};
 }
 
 enum CheckStatus { ok, warning, blocked }
@@ -145,9 +147,28 @@ class CheckResult {
   final bool injectionDetected;
   final List<String> injectionEvidence;
   final String reasoning;
+
+  Map<String, dynamic> toJson() => {
+    'status': status.name,
+    'issues': issues.map((i) => i.toJson()).toList(),
+    'injection_detected': injectionDetected,
+    'injection_evidence': injectionEvidence,
+    'reasoning': reasoning,
+  };
+
+  factory CheckResult.fromJson(Map<String, dynamic> j) => CheckResult(
+    status: CheckStatus.values.where((s) => s.name == j['status']).firstOrNull ?? CheckStatus.blocked,
+    issues: (j['issues'] as List? ?? const [])
+        .whereType<Map>()
+        .map((m) => Issue.fromJson(m.cast<String, dynamic>()))
+        .toList(),
+    injectionDetected: j['injection_detected'] == true,
+    injectionEvidence: _toStrList(j['injection_evidence']),
+    reasoning: _toStr(j['reasoning']) ?? '',
+  );
 }
 
-/// Output of the Booker agent.
+/// Output of the Exporter agent.
 class BookingSuggestion {
   BookingSuggestion({
     this.account,
@@ -170,33 +191,33 @@ class BookingSuggestion {
   final String reasoning;
 
   factory BookingSuggestion.fromJson(Map<String, dynamic> j) => BookingSuggestion(
-        account: _toStr(j['account']),
-        accountName: _toStr(j['account_name']),
-        contraAccount: _toStr(j['contra_account']),
-        contraAccountName: _toStr(j['contra_account_name']),
-        taxCode: _toStr(j['tax_code']),
-        bookingText: _toStr(j['booking_text']),
-        confidence: _toDouble(j['confidence']),
-        reasoning: _toStr(j['reasoning']) ?? '',
-      );
+    account: _toStr(j['account']),
+    accountName: _toStr(j['account_name']),
+    contraAccount: _toStr(j['contra_account']),
+    contraAccountName: _toStr(j['contra_account_name']),
+    taxCode: _toStr(j['tax_code']),
+    bookingText: _toStr(j['booking_text']),
+    confidence: _toDouble(j['confidence']),
+    reasoning: _toStr(j['reasoning']) ?? '',
+  );
 
   Map<String, dynamic> toJson() => {
-        'account': account,
-        'account_name': accountName,
-        'contra_account': contraAccount,
-        'contra_account_name': contraAccountName,
-        'tax_code': taxCode,
-        'booking_text': bookingText,
-        'confidence': confidence,
-        'reasoning': reasoning,
-      };
+    'account': account,
+    'account_name': accountName,
+    'contra_account': contraAccount,
+    'contra_account_name': contraAccountName,
+    'tax_code': taxCode,
+    'booking_text': bookingText,
+    'confidence': confidence,
+    'reasoning': reasoning,
+  };
 }
 
 enum LogLevel { info, agent, warn, block, human }
 
 class LogEntry {
   LogEntry(this.actor, this.message, {this.level = LogLevel.info, this.detail, DateTime? at})
-      : at = at ?? DateTime.now();
+    : at = at ?? DateTime.now();
   final DateTime at;
   final String? detail;
   final String actor;
@@ -219,13 +240,16 @@ class ApprovalRecommendation {
       confidence: _toDouble(j['confidence']),
     );
   }
+
+  Map<String, dynamic> toJson() => {'decision': decision, 'reasoning': reasoning, 'confidence': confidence};
 }
 
 /// Everything known about one uploaded document as it moves through the flow.
 class InvoiceCase {
-  InvoiceCase(this.fileName, {String? id, this.mimeType = 'application/octet-stream', this.bytes})
-      : id = id ?? DateTime.now().microsecondsSinceEpoch.toString();
+  InvoiceCase(this.fileName, {String? id, this.serverId, this.mimeType = 'application/octet-stream', this.bytes})
+    : id = id ?? DateTime.now().microsecondsSinceEpoch.toString();
   final String id;
+  String? serverId; // case id on the backend while the flow is running
   final String fileName;
   final String mimeType;
   Uint8List? bytes; // original file, only in memory until it is filed
@@ -247,22 +271,25 @@ class InvoiceCase {
 
   /// Archive record (without the original file and the raw text).
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'file_name': fileName,
-        'mime_type': mimeType,
-        'has_original': hasOriginal,
-        'invoice': invoice?.toJson(),
-        'check_status': check?.status.name,
-        'issues': check?.issues.map((i) => {'code': i.code, 'severity': i.severity.name, 'message': i.message}).toList(),
-        'booking': booking?.toJson(),
-        'decision': decision,
-        'decided_by': decidedBy,
-        'decided_at': decidedAt?.toIso8601String(),
-      };
+    'id': id,
+    'file_name': fileName,
+    'mime_type': mimeType,
+    'has_original': hasOriginal,
+    'invoice': invoice?.toJson(),
+    'check_status': check?.status.name,
+    'issues': check?.issues.map((i) => {'code': i.code, 'severity': i.severity.name, 'message': i.message}).toList(),
+    'booking': booking?.toJson(),
+    'decision': decision,
+    'decided_by': decidedBy,
+    'decided_at': decidedAt?.toIso8601String(),
+  };
 
   factory InvoiceCase.fromJson(Map<String, dynamic> j) {
-    final c = InvoiceCase(_toStr(j['file_name']) ?? 'receipt',
-        id: _toStr(j['id']), mimeType: _toStr(j['mime_type']) ?? 'application/octet-stream');
+    final c = InvoiceCase(
+      _toStr(j['file_name']) ?? 'receipt',
+      id: _toStr(j['id']),
+      mimeType: _toStr(j['mime_type']) ?? 'application/octet-stream',
+    );
     final inv = j['invoice'];
     if (inv is Map) c.invoice = InvoiceData.fromJson(inv.cast<String, dynamic>());
     final status = CheckStatus.values.where((s) => s.name == j['check_status']).firstOrNull;

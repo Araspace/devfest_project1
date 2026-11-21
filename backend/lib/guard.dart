@@ -3,7 +3,7 @@
 // The LLM Checker can flag issues, but it can never *clear* what these rules
 // find: an injection hit here forces the invoice to BLOCKED.
 
-import 'models.dart';
+import 'package:belegguard_shared/models.dart';
 
 class InjectionGuard {
   static final List<RegExp> _patterns = [
@@ -34,7 +34,10 @@ class InjectionGuard {
     // Zero-width / bidi control characters are a classic hiding trick.
     // A leading BOM (Windows text files) and LRM/RLM marks (common in PDF text) are harmless.
     final body = text.startsWith('﻿') ? text.substring(1) : text;
-    if (body.runes.any((r) => (r >= 0x200B && r <= 0x200D) || (r >= 0x202A && r <= 0x202E) || (r >= 0x2060 && r <= 0x2064) || r == 0xFEFF)) {
+    if (body.runes.any(
+      (r) =>
+          (r >= 0x200B && r <= 0x200D) || (r >= 0x202A && r <= 0x202E) || (r >= 0x2060 && r <= 0x2064) || r == 0xFEFF,
+    )) {
       hits.add('Invisible Unicode control characters found in invoice text');
     }
     return hits.toSet().toList();
@@ -76,8 +79,13 @@ class ComplianceRules {
     require(inv.deliveryDate, 'DELIVERY_DATE', 'date of delivery/service', alsoSmall: false);
 
     if (inv.vatId == null && inv.taxNumber == null && !smallAmount) {
-      issues.add(Issue('VAT_ID', Severity.error,
-          'Neither VAT ID (USt-IdNr.) nor tax number (Steuernummer) of the supplier is stated (§14 Abs. 4 Nr. 2 UStG)'));
+      issues.add(
+        Issue(
+          'VAT_ID',
+          Severity.error,
+          'Neither VAT ID (USt-IdNr.) nor tax number (Steuernummer) of the supplier is stated (§14 Abs. 4 Nr. 2 UStG)',
+        ),
+      );
     } else if (inv.vatId != null) {
       final id = inv.vatId!.replaceAll(' ', '').toUpperCase();
       if (!_vatIdRe.hasMatch(id) || (id.startsWith('DE') && !_deVatIdRe.hasMatch(id))) {
@@ -88,8 +96,13 @@ class ComplianceRules {
     if (inv.net != null && inv.vat != null && inv.gross != null) {
       final diff = (inv.net! + inv.vat! - inv.gross!).abs();
       if (diff > 0.02) {
-        issues.add(Issue('SUM_MISMATCH', Severity.error,
-            'Net ${inv.net!.toStringAsFixed(2)} + VAT ${inv.vat!.toStringAsFixed(2)} ≠ gross ${inv.gross!.toStringAsFixed(2)}'));
+        issues.add(
+          Issue(
+            'SUM_MISMATCH',
+            Severity.error,
+            'Net ${inv.net!.toStringAsFixed(2)} + VAT ${inv.vat!.toStringAsFixed(2)} ≠ gross ${inv.gross!.toStringAsFixed(2)}',
+          ),
+        );
       }
     } else if (!smallAmount) {
       issues.add(Issue('AMOUNTS', Severity.error, 'Net amount, VAT amount or gross amount missing'));
@@ -99,11 +112,21 @@ class ComplianceRules {
       final rate = inv.vat! / inv.net! * 100;
       const allowed = [0.0, 7.0, 19.0];
       if (!allowed.any((r) => (r - rate).abs() < 0.6)) {
-        issues.add(Issue('VAT_RATE', Severity.error,
-            'Effective VAT rate ${rate.toStringAsFixed(1)} % is not a German rate (0 / 7 / 19 %)'));
+        issues.add(
+          Issue(
+            'VAT_RATE',
+            Severity.error,
+            'Effective VAT rate ${rate.toStringAsFixed(1)} % is not a German rate (0 / 7 / 19 %)',
+          ),
+        );
       } else if (inv.vatRate != null && (inv.vatRate! - rate).abs() > 0.6) {
-        issues.add(Issue('VAT_RATE_MISMATCH', Severity.warning,
-            'Stated rate ${inv.vatRate} % does not match computed ${rate.toStringAsFixed(1)} %'));
+        issues.add(
+          Issue(
+            'VAT_RATE_MISMATCH',
+            Severity.warning,
+            'Stated rate ${inv.vatRate} % does not match computed ${rate.toStringAsFixed(1)} %',
+          ),
+        );
       }
     }
     return issues;
