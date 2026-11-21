@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'agents.dart';
+import 'archive.dart';
 import 'excel_export.dart';
 import 'gemini_client.dart';
 import 'main.dart' show Brand;
@@ -34,7 +35,8 @@ class _HomePageState extends State<HomePage> {
     FlowStep('Export', 'Exporter agent', Icons.table_view_outlined),
   ];
   final List<LogEntry> _log = [];
-  final List<InvoiceCase> _approved = [];
+  final List<InvoiceCase> _archive = Archive.load();
+  String _query = '';
   InvoiceCase? _case;
   bool _busy = false;
   String? _error;
@@ -74,7 +76,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _run(UploadedDoc doc) async {
-    final c = InvoiceCase(doc.name);
+    final c = InvoiceCase(doc.name, mimeType: doc.mimeType, bytes: doc.bytes);
     setState(() {
       _case = c;
       _busy = true;
@@ -123,11 +125,11 @@ class _HomePageState extends State<HomePage> {
       _log_('Approver', 'Recommends: ${rec.decision.replaceAll('_', ' ')}', detail: rec.reasoning);
 
       if (chk.status == CheckStatus.blocked) {
-        _decide(c, approved: false, by: 'guard');
+        await _decide(c, approved: false, by: 'guard');
       } else if (Settings.autoApprove && rec.decision == 'approve') {
-        _decide(c, approved: true, by: 'approver agent');
+        await _decide(c, approved: true, by: 'approver agent');
       } else if (Settings.autoApprove && rec.decision == 'reject') {
-        _decide(c, approved: false, by: 'approver agent');
+        await _decide(c, approved: false, by: 'approver agent');
       } else {
         _set(i, StepState.waiting, 'Your decision is needed');
         _log_('System', 'Waiting for human approval – nothing written yet', level: LogLevel.human);
@@ -167,13 +169,19 @@ class _HomePageState extends State<HomePage> {
       _set(3, StepState.running, 'Mapping to SKR03 and writing Excel…');
       final b = await _agents.export(c.invoice!);
       c.booking = b;
-      _approved.add(c);
-      final file = ExcelExport.download(_approved, _log.reversed.toList());
-      _set(3, StepState.done, '${b.account} ${b.accountName ?? ''} → $file');
-      _log_('Exporter', 'Booked ${b.account} an ${b.contraAccount} (BU ${b.taxCode ?? '-'}), Excel downloaded',
+      final copied = Archive.file(c, _archive);
+      c.bytes = null;
+      _set(3, StepState.done, '${b.account} ${b.accountName ?? ''} → filed under ${c.period}');
+      _log_('Exporter', 'Booked ${b.account} an ${b.contraAccount} (BU ${b.taxCode ?? '-'}), filed under ${c.period}',
           level: LogLevel.human, detail: b.reasoning);
+      if (!copied) {
+        _log_('System', 'Browser storage full – booking filed, but the original file was not copied',
+            level: LogLevel.warn);
+      }
     } on GeminiException catch (e) {
       _fail(3, e.message);
+    } catch (e) {
+      _fail(3, 'Export failed: $e');
     } finally {
       setState(() => _busy = false);
     }
@@ -202,6 +210,8 @@ class _HomePageState extends State<HomePage> {
                   const SizedBox(height: 28),
                   _detailsCard(),
                 ],
+                const SizedBox(height: 28),
+                _archiveCard(),
                 const SizedBox(height: 28),
                 _AuditLog(log: _log),
               ]),
@@ -262,14 +272,6 @@ class _HomePageState extends State<HomePage> {
                 : const Icon(Icons.add_rounded),
             label: Text(_busy ? 'Agents at work…' : 'Choose invoice'),
           ),
-          if (_approved.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            TextButton.icon(
-              onPressed: () => ExcelExport.download(_approved, _log.reversed.toList()),
-              icon: const Icon(Icons.download_rounded, color: Brand.purple),
-              label: Text('Download Excel (${_approved.length} booked)', style: const TextStyle(color: Brand.ink)),
-            ),
-          ],
         ]),
       ),
     );
@@ -409,6 +411,109 @@ class _HomePageState extends State<HomePage> {
           ],
         ]),
       ),
+    );
+  }
+
+  // ------------------------------------------------------------------ archive
+
+  Widget _archiveCard() {
+    final q = _query.trim().toLowerCase();
+    final items = _archive.where((c) {
+      if (q.isEmpty) return true;
+      final i = c.invoice;
+      return [c.fileName, i?.supplierName, i?.invoiceNumber, c.booking?.account, c.booking?.accountName, c.period]
+          .any((v) => v != null && v.toLowerCase().contains(q));
+    }).toList()
+      ..sort((a, b) => (b.invoice?.invoiceDate ?? b.period).compareTo(a.invoice?.invoiceDate ?? a.period));
+
+    final byMonth = <String, List<InvoiceCase>>{};
+    for (final c in items) {
+      byMonth.putIfAbsent(c.period, () => []).add(c);
+    }
+    final total = items.fold<double>(0, (sum, c) => sum + (c.invoice?.gross ?? 0));
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.inventory_2_outlined, color: Brand.purple),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Receipt archive',
+                  style: GoogleFonts.bricolageGrotesque(fontSize: 22, fontWeight: FontWeight.w600)),
+            ),
+            if (_archive.isNotEmpty)
+              TextButton.icon(
+                onPressed: () => ExcelExport.download(items, _log.reversed.toList()),
+                icon: const Icon(Icons.download_rounded, color: Brand.purple),
+                label: const Text('Excel', style: TextStyle(color: Brand.ink)),
+              ),
+          ]),
+          const SizedBox(height: 4),
+          Text(
+              _archive.isEmpty
+                  ? 'Approved receipts are copied and filed here, sorted by month.'
+                  : '${items.length} receipt${items.length == 1 ? '' : 's'} · ${_money(total)} gross',
+              style: const TextStyle(color: Brand.muted)),
+          if (_archive.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            TextField(
+              decoration: const InputDecoration(
+                  hintText: 'Search supplier, invoice no., account, month…', prefixIcon: Icon(Icons.search)),
+              onChanged: (v) => setState(() => _query = v),
+            ),
+          ],
+          for (final entry in byMonth.entries) ...[
+            const SizedBox(height: 20),
+            Row(children: [
+              const Icon(Icons.folder_outlined, size: 18, color: Brand.orangeDark),
+              const SizedBox(width: 6),
+              Text(entry.key, style: const TextStyle(fontWeight: FontWeight.w700, color: Brand.orangeDark)),
+              const SizedBox(width: 8),
+              Text(
+                  '${entry.value.length} · ${_money(entry.value.fold<double>(0, (s, c) => s + (c.invoice?.gross ?? 0)))}',
+                  style: const TextStyle(color: Brand.muted)),
+            ]),
+            const Divider(color: Brand.line),
+            for (final c in entry.value) _archiveRow(c),
+          ],
+        ]),
+      ),
+    );
+  }
+
+  Widget _archiveRow(InvoiceCase c) {
+    final i = c.invoice;
+    final b = c.booking;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(i?.supplierName ?? c.fileName, style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+                [i?.invoiceDate, i?.invoiceNumber, if (b?.account != null) '${b!.account} ${b.accountName ?? ''}']
+                    .whereType<String>()
+                    .join(' · '),
+                style: const TextStyle(color: Brand.muted, fontSize: 13)),
+          ]),
+        ),
+        Text(_money(i?.gross), style: const TextStyle(fontWeight: FontWeight.w600)),
+        IconButton(
+          tooltip: c.hasOriginal ? 'Download original' : 'Original not stored (browser storage full)',
+          onPressed: c.hasOriginal ? () => Archive.downloadOriginal(c) : null,
+          icon: const Icon(Icons.file_download_outlined, color: Brand.purple),
+        ),
+        IconButton(
+          tooltip: 'Remove from archive',
+          onPressed: () {
+            setState(() => Archive.remove(c, _archive));
+            _log_('Human', 'Removed ${c.fileName} from the archive', level: LogLevel.human);
+          },
+          icon: const Icon(Icons.delete_outline, color: Brand.muted),
+        ),
+      ]),
     );
   }
 

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 // Data models shared by the agents, the UI and the Excel export.
 
 double? _toDouble(Object? v) {
@@ -177,6 +179,17 @@ class BookingSuggestion {
         confidence: _toDouble(j['confidence']),
         reasoning: _toStr(j['reasoning']) ?? '',
       );
+
+  Map<String, dynamic> toJson() => {
+        'account': account,
+        'account_name': accountName,
+        'contra_account': contraAccount,
+        'contra_account_name': contraAccountName,
+        'tax_code': taxCode,
+        'booking_text': bookingText,
+        'confidence': confidence,
+        'reasoning': reasoning,
+      };
 }
 
 enum LogLevel { info, agent, warn, block, human }
@@ -210,8 +223,12 @@ class ApprovalRecommendation {
 
 /// Everything known about one uploaded document as it moves through the flow.
 class InvoiceCase {
-  InvoiceCase(this.fileName);
+  InvoiceCase(this.fileName, {String? id, this.mimeType = 'application/octet-stream', this.bytes})
+      : id = id ?? DateTime.now().microsecondsSinceEpoch.toString();
+  final String id;
   final String fileName;
+  final String mimeType;
+  Uint8List? bytes; // original file, only in memory until it is filed
   InvoiceData? invoice;
   CheckResult? check;
   ApprovalRecommendation? recommendation;
@@ -219,4 +236,54 @@ class InvoiceCase {
   String decision = 'pending'; // pending | approved | rejected
   String decidedBy = ''; // 'human' | 'approver agent'
   DateTime? decidedAt;
+  bool hasOriginal = false; // original file is stored in the archive
+
+  /// Month folder used by the archive, e.g. "2026-11".
+  String get period {
+    final d = invoice?.invoiceDate;
+    if (d != null && RegExp(r'^\d{4}-\d{2}').hasMatch(d)) return d.substring(0, 7);
+    return (decidedAt ?? DateTime.now()).toIso8601String().substring(0, 7);
+  }
+
+  /// Archive record (without the original file and the raw text).
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'file_name': fileName,
+        'mime_type': mimeType,
+        'has_original': hasOriginal,
+        'invoice': invoice?.toJson(),
+        'check_status': check?.status.name,
+        'issues': check?.issues.map((i) => {'code': i.code, 'severity': i.severity.name, 'message': i.message}).toList(),
+        'booking': booking?.toJson(),
+        'decision': decision,
+        'decided_by': decidedBy,
+        'decided_at': decidedAt?.toIso8601String(),
+      };
+
+  factory InvoiceCase.fromJson(Map<String, dynamic> j) {
+    final c = InvoiceCase(_toStr(j['file_name']) ?? 'receipt',
+        id: _toStr(j['id']), mimeType: _toStr(j['mime_type']) ?? 'application/octet-stream');
+    final inv = j['invoice'];
+    if (inv is Map) c.invoice = InvoiceData.fromJson(inv.cast<String, dynamic>());
+    final status = CheckStatus.values.where((s) => s.name == j['check_status']).firstOrNull;
+    if (status != null) {
+      c.check = CheckResult(
+        status: status,
+        issues: (j['issues'] as List? ?? const [])
+            .whereType<Map>()
+            .map((m) => Issue.fromJson(m.cast<String, dynamic>()))
+            .toList(),
+        injectionDetected: false,
+        injectionEvidence: const [],
+        reasoning: '',
+      );
+    }
+    final b = j['booking'];
+    if (b is Map) c.booking = BookingSuggestion.fromJson(b.cast<String, dynamic>());
+    c.decision = _toStr(j['decision']) ?? 'approved';
+    c.decidedBy = _toStr(j['decided_by']) ?? '';
+    c.decidedAt = DateTime.tryParse(j['decided_at']?.toString() ?? '');
+    c.hasOriginal = j['has_original'] == true;
+    return c;
+  }
 }

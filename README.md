@@ -20,7 +20,10 @@ Checker agent ──── §14 UStG mandatory details, VAT rate, sums, hidden p
 Approver agent ─── recommends approve / reject / human review
    │                 → you decide (default) or the agent decides clear cases (setting)
    ▼
-Exporter agent ─── SKR03 account, contra account, DATEV tax code → Excel download
+Exporter agent ─── SKR03 account, contra account, DATEV tax code
+   │
+   ▼
+Receipt archive ── original copied + filed by month (browser storage), Excel export
    │
    ▼
 Audit log (on screen + "Audit-Log" sheet in the Excel file)
@@ -67,6 +70,7 @@ flutter build web --no-tree-shake-icons
 lib/
   main.dart           Theme (orange / purple, Bricolage Grotesque header)
   home_page.dart      Upload, 4-step flow, decision, invoice data, audit log
+  archive.dart        Receipt archive: filed receipts + original copies (localStorage)
   agents.dart         Extractor, Checker, Approver, Exporter
   gemini_client.dart  Gemini REST client
   guard.dart          Injection guard + §14 UStG rules

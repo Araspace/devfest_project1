@@ -58,22 +58,35 @@ class GeminiClient {
       'generationConfig': {'responseMimeType': 'application/json', 'temperature': 0},
     };
 
-    final http.Response res;
-    try {
-      res = await http
-          .post(uri,
-              headers: {'Content-Type': 'application/json', 'x-goog-api-key': apiKey}, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 90));
-    } catch (e) {
-      throw GeminiException('Could not reach the Gemini API: $e');
+    // Retry transient errors (rate limit / overload) – common during live demos.
+    http.Response? res;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        res = await http
+            .post(uri,
+                headers: {'Content-Type': 'application/json', 'x-goog-api-key': apiKey}, body: jsonEncode(body))
+            .timeout(const Duration(seconds: 90));
+      } catch (e) {
+        if (attempt == 2) throw GeminiException('Could not reach the Gemini API: $e');
+        await Future.delayed(Duration(seconds: 2 << attempt));
+        continue;
+      }
+      if (!const {429, 500, 503}.contains(res.statusCode) || attempt == 2) break;
+      await Future.delayed(Duration(seconds: 2 << attempt));
     }
 
-    final decoded = jsonDecode(utf8.decode(res.bodyBytes));
-    if (res.statusCode != 200) {
+    final r = res!;
+    Object? decoded;
+    try {
+      decoded = jsonDecode(utf8.decode(r.bodyBytes));
+    } on FormatException {
+      decoded = null;
+    }
+    if (r.statusCode != 200 || decoded is! Map) {
       final err = decoded is Map ? decoded['error'] : null;
       final msg = err is Map ? err['message'] : null;
-      final hint = res.statusCode == 404 ? ' → Open Settings (top right) and enter a current model name.' : '';
-      throw GeminiException('Gemini API error ${res.statusCode}: ${msg ?? res.body}$hint');
+      final hint = r.statusCode == 404 ? ' → Open Settings (top right) and enter a current model name.' : '';
+      throw GeminiException('Gemini API error ${r.statusCode}: ${msg ?? r.body}$hint');
     }
 
     final candidates = (decoded['candidates'] as List?) ?? const [];
@@ -86,7 +99,13 @@ class GeminiClient {
     if (text.startsWith('```')) {
       text = text.replaceFirst(RegExp(r'^```(json)?'), '').replaceFirst(RegExp(r'```$'), '').trim();
     }
-    final json = jsonDecode(text);
+    final Object? json;
+    try {
+      json = jsonDecode(text);
+    } on FormatException {
+      final finish = candidates.first['finishReason'];
+      throw GeminiException('Gemini returned invalid JSON${finish != null ? ' (finish reason: $finish)' : ''}');
+    }
     if (json is! Map<String, dynamic>) throw GeminiException('Gemini did not return a JSON object');
     return json;
   }
