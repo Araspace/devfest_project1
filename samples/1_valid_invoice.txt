@@ -1,0 +1,20 @@
+Bürobedarf Weber GmbH
+Hafenweg 12, 48155 Münster
+USt-IdNr.: DE287654321
+
+An: Muster Consulting UG, Ludgeristraße 5, 48143 Münster
+
+RECHNUNG Nr. RE-2026-1142
+Rechnungsdatum: 14.11.2026
+Leistungsdatum: 12.11.2026
+
+Pos  Beschreibung                    Menge  Einzelpreis   Gesamt
+1    Ergonomischer Bürostuhl "Flex"  2      180,00 EUR    360,00 EUR
+2    Monitorarm, doppelt             1       90,00 EUR     90,00 EUR
+
+Nettobetrag:                                             450,00 EUR
+zzgl. 19 % USt:                                           85,50 EUR
+Rechnungsbetrag (brutto):                                535,50 EUR
+
+Zahlbar innerhalb 14 Tagen ohne Abzug.
+IBAN: DE89 3704 0044 0532 0130 00 · Sparkasse Münsterland Ost
