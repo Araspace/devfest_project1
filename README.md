@@ -78,4 +78,5 @@ lib/
   settings.dart       API key / model / auto-approve (localStorage)
   models.dart         Data models
 docs/PLAN.md          Hackathon plan
+docs/PITCH.md         Pitch, demo script, jury Q&A
 ```
