@@ -2,6 +2,9 @@
 
 Multi-agent invoice checker. Flutter frontend, Gemini agents, human approval, Excel export.
 
+> Original plan from the start of the hackathon. Since then the Gemini calls moved into a Dart
+> backend (the key never reaches the browser) – see the README for the current architecture.
+
 ## Pitch
 "Qonto stores receipts. Our agents check them for legal compliance and resist manipulation."
 

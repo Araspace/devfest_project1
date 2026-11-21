@@ -1,5 +1,6 @@
 // Minimal client for the Google Gemini API (generativelanguage.googleapis.com).
-// Called straight from the browser with an API key from Google AI Studio.
+// Only the backend uses it: the API key (Google AI Studio) is sent in a header and
+// never reaches the browser.
 
 import 'dart:async';
 import 'dart:convert';
@@ -184,7 +185,7 @@ class GeminiClient {
     if (r.statusCode != 200 || decoded is! Map) {
       final err = decoded is Map ? decoded['error'] : null;
       final msg = err is Map ? err['message'] : null;
-      final hint = r.statusCode == 404 ? ' → Open Settings (top right) and enter a current model name.' : '';
+      final hint = r.statusCode == 404 ? ' → Set a current model name as GEMINI_MODEL in .env and restart the backend.' : '';
       throw GeminiException('Gemini API error ${r.statusCode}: ${msg ?? r.body}$hint');
     }
 

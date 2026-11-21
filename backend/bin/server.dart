@@ -3,6 +3,7 @@
 //   GEMINI_API_KEY   required – stays on the server, never sent to the browser
 //   GEMINI_MODEL     optional, default gemini-3.6-flash
 //   PORT             optional, default 8080
+//   SHIELD           optional, on|off (default on; off disables the injection guard, demo only)
 //   ALLOWED_ORIGINS  optional, comma-separated browser origins (default: any localhost)
 //
 //   cd backend && dart run bin/server.dart
