@@ -11,7 +11,12 @@ class FakeGemini extends GeminiClient {
   FakeGemini(this.answer) : super(apiKey: 'test', model: 'fake');
   final Map<String, dynamic> answer;
   @override
-  Future<Map<String, dynamic>> generateJson({required String system, required List<GeminiPart> parts}) async => answer;
+  Future<Map<String, dynamic>> generateJson({
+    required String system,
+    required List<GeminiPart> parts,
+    List<Map<String, Object?>>? tools,
+    Map<String, Object?> Function(String name, Map<String, Object?> args)? onToolCall,
+  }) async => answer;
 }
 
 const okCheck = {

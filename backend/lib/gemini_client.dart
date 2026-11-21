@@ -59,10 +59,48 @@ class GeminiClient {
 
   /// Sends one request with a fixed system instruction and returns the parsed
   /// JSON object the model produced.
-  Future<Map<String, dynamic>> generateJson({required String system, required List<GeminiPart> parts}) async {
-    final contents = [
+  ///
+  /// With [tools] (Gemini functionDeclarations) the model may call functions first:
+  /// each call is run through [onToolCall] and the result sent back, for at most
+  /// [maxToolRounds] rounds, until the model answers with JSON.
+  Future<Map<String, dynamic>> generateJson({
+    required String system,
+    required List<GeminiPart> parts,
+    List<Map<String, Object?>>? tools,
+    Map<String, Object?> Function(String name, Map<String, Object?> args)? onToolCall,
+  }) async {
+    final contents = <Map<String, Object?>>[
       {'role': 'user', 'parts': parts.map((p) => p.toJson()).toList()},
     ];
+    for (var round = 0; ; round++) {
+      final withTools = tools != null && onToolCall != null && round < maxToolRounds;
+      final candidate = await _send(system, contents, withTools ? tools : null);
+      final outParts = (candidate['content']?['parts'] as List?) ?? const [];
+      final calls = outParts.whereType<Map>().where((p) => p['functionCall'] is Map).toList();
+      if (calls.isEmpty || !withTools) return _parseJson(candidate, outParts);
+      // Send the model's turn back unchanged (keeps thought signatures), then the results.
+      contents.add({'role': 'model', 'parts': outParts});
+      contents.add({
+        'role': 'user',
+        'parts': [
+          for (final c in calls)
+            {
+              'functionResponse': {
+                'name': c['functionCall']['name'],
+                'response': onToolCall(
+                  c['functionCall']['name'].toString(),
+                  ((c['functionCall']['args'] as Map?) ?? const {}).cast<String, Object?>(),
+                ),
+              },
+            },
+        ],
+      });
+    }
+  }
+
+  static const maxToolRounds = 3;
+
+  Future<Map<String, dynamic>> _send(String system, List<Map<String, Object?>> contents, List<Object?>? tools) async {
     Map<String, dynamic> body(String m, String thinkingLevel) {
       final isGemini3 = m.startsWith('gemini-3');
       return {
@@ -72,8 +110,13 @@ class GeminiClient {
           ],
         },
         'contents': contents,
+        if (tools != null)
+          'tools': [
+            {'functionDeclarations': tools},
+          ],
         'generationConfig': {
-          'responseMimeType': 'application/json',
+          // JSON mode and function calling don't mix on every model; with tools we parse the text.
+          if (tools == null) 'responseMimeType': 'application/json',
           // Gemini 3 models must run at the default temperature (1.0): lower values make them
           // loop until the request times out. Older models stay deterministic.
           if (!isGemini3) 'temperature': 0,
@@ -150,8 +193,13 @@ class GeminiClient {
       final reason = decoded['promptFeedback']?['blockReason'];
       throw GeminiException('Gemini returned no answer${reason != null ? ' (blocked: $reason)' : ''}');
     }
-    final outParts = (candidates.first['content']?['parts'] as List?) ?? const [];
+    return (candidates.first as Map).cast<String, dynamic>();
+  }
+
+  Map<String, dynamic> _parseJson(Map<String, dynamic> candidate, List outParts) {
     var text = outParts.where((p) => p['thought'] != true).map((p) => p['text'] ?? '').join().trim();
+    final start = text.indexOf('{');
+    if (!text.startsWith('{') && start > 0 && !text.startsWith('```')) text = text.substring(start);
     if (text.startsWith('```')) {
       text = text.replaceFirst(RegExp(r'^```(json)?'), '').replaceFirst(RegExp(r'```$'), '').trim();
     }
@@ -159,7 +207,7 @@ class GeminiClient {
     try {
       json = jsonDecode(text);
     } on FormatException {
-      final finish = candidates.first['finishReason'];
+      final finish = candidate['finishReason'];
       throw GeminiException('Gemini returned invalid JSON${finish != null ? ' (finish reason: $finish)' : ''}');
     }
     if (json is! Map<String, dynamic>) throw GeminiException('Gemini did not return a JSON object');
