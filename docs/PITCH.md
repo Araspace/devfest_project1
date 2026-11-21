@@ -69,7 +69,7 @@ Flutter Web ──► Gemini API (generativelanguage.googleapis.com)
 ```
 
 - **Frontend:** Flutter Web, single page, no backend
-- **AI:** Google Gemini (`gemini-3.8-flash`), one call per agent, JSON output
+- **AI:** Google Gemini (`gemini-3.6-flash`, automatic fallback to other Flash models), one call per agent, JSON output
 - **Export:** `excel` package, download in the browser
 - **Code:** `lib/agents.dart` (agents), `lib/guard.dart` (rules + guard), `lib/home_page.dart` (UI)
 
