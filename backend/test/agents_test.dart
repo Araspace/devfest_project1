@@ -97,6 +97,21 @@ void main() {
       expect(r.status, CheckStatus.warning);
     });
 
+    test('LLM findings that repeat a rule finding are dropped', () async {
+      final r = await check(invoice(vatId: null), {
+        ...okCheck,
+        'status': 'warning',
+        'issues': [
+          {'code': 'MISSING_TAX_ID_OR_VAT_ID', 'severity': 'error', 'message': 'no VAT ID'},
+          {'code': 'ODD_DESCRIPTION', 'severity': 'warning', 'message': 'vague'},
+        ],
+      });
+      final codes = r.issues.map((i) => i.code).toList();
+      expect(codes, contains('VAT_ID'));
+      expect(codes, isNot(contains('MISSING_TAX_ID_OR_VAT_ID')));
+      expect(codes, contains('ODD_DESCRIPTION')); // unrelated LLM findings stay
+    });
+
     test('missing VAT ID is not ok', () async {
       expect((await check(invoice(vatId: null))).status, CheckStatus.warning);
     });
