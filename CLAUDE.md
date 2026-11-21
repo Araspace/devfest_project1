@@ -35,14 +35,16 @@ backend/                    Dart API server (shelf) – the only part that talks
   lib/api.dart              HTTP routes, server-side case store, approval rules, audit_log.jsonl
   lib/agents.dart           Extractor → Checker → Approver → Exporter (prompts + hard limits)
   lib/guard.dart            Deterministic injection guard + §14 UStG rules
+  lib/tools.dart            Read-only Checker tools (lookup_supplier, check_duplicate) + allowlist
   lib/gemini_client.dart    Gemini REST client with model fallback
-  test/                     Guard, rules, agents and API tests (fake Gemini, no network)
+  test/                     Guard, rules, tools, agents and API tests (fake Gemini, no network)
 frontend/                   Flutter Web UI – never sees the API key
   lib/main.dart             App entry
   lib/theme.dart            Brand colours, theme, shared helpers (money, headline)
   lib/pages/home_page.dart  The page: state + flow, composes the components
   lib/components/           Global UI components, one per file (step_row, upload_card, invoice_details_card,
-                            recommendation_box, archive_card, audit_log, key_value, settings_dialog)
+                            recommendation_box, archive_card, audit_log, key_value, settings_dialog,
+                            shield_badge)
   lib/services/             api_client (backend calls), archive (IndexedDB/localStorage),
                             excel_export, settings (backend URL, auto-approve)
   web/index.html            Loading screen

@@ -137,8 +137,15 @@ Return exactly:
     // *considers* suspicious is re-checked by the guard: a hit blocks, otherwise it
     // becomes a finding for human review (never auto-approved). This keeps harmless
     // lines like "Zahlbar sofort" from blocking a clean invoice.
+    // The extracted fields are scanned too: they are passed on to the Approver and the
+    // Exporter, and an Extractor that was talked into dropping a line from "raw_text"
+    // must not be able to smuggle it through in "description".
     final guardHits = shield
-        ? [...InjectionGuard.scan(inv.rawText), for (final s in inv.suspiciousText) ...InjectionGuard.scan(s)]
+        ? {
+            ...InjectionGuard.scan(inv.rawText),
+            for (final s in inv.suspiciousText) ...InjectionGuard.scan(s),
+            for (final f in inv.toJson().values.whereType<String>()) ...InjectionGuard.scan(f),
+          }.toList()
         : const <String>[];
     final flaggedOnly = shield
         ? inv.suspiciousText.where((s) => InjectionGuard.scan(s).isEmpty).toList()

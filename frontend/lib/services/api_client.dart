@@ -51,6 +51,9 @@ class ApiClient {
   Future<BookingSuggestion> export(String id, {required String approvedBy}) async =>
       BookingSuggestion.fromJson(await _post('api/cases/$id/export', {'approved_by': approvedBy}));
 
+  /// Tells the server about a rejection, so it lands in audit_log.jsonl and the case is dropped.
+  Future<void> reject(String id, {required String by}) => _post('api/cases/$id/reject', {'rejected_by': by});
+
   Future<Map<String, dynamic>> _post(String path, Object body) async {
     final http.Response res;
     try {

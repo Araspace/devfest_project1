@@ -35,7 +35,7 @@ Audit log (on screen + "Audit-Log" sheet in the Excel file)
 ```
 
 Each agent is a separate call to the Gemini API (`generativelanguage.googleapis.com`) with its
-own fixed system instruction and JSON output. Default model: `gemini-3.6-flash` (change it under Settings if Google retires it).
+own fixed system instruction and JSON output. Default model: `gemini-3.6-flash` (set `GEMINI_MODEL` in `.env` if Google retires it).
 
 ## Security
 
@@ -62,7 +62,7 @@ own fixed system instruction and JSON output. Default model: `gemini-3.6-flash` 
 
 | Rule | Where | Effect |
 |---|---|---|
-| `PROMPT_INJECTION` | `guard.dart` + Checker | Instructions aimed at AI agents or invisible Unicode → **blocked**, no agent can unblock |
+| `PROMPT_INJECTION` | `guard.dart` + Checker | Instructions aimed at AI agents or invisible Unicode, in the raw text or in any extracted field → **blocked**, no agent can unblock |
 | `SUSPICIOUS_TEXT` | Extractor + guard | Text the Extractor flags but the guard doesn't confirm → human review |
 | §14 UStG mandatory details | `guard.dart` (`ComplianceRules`) | Missing VAT ID / tax number, date, number … → finding, never auto-approved |
 | Sums / VAT rate | `ComplianceRules` | net + VAT ≠ gross, unusual rate → finding |
@@ -71,7 +71,8 @@ own fixed system instruction and JSON output. Default model: `gemini-3.6-flash` 
 | `DUPLICATE_INVOICE` | `tools.dart` + Checker | Same supplier + invoice number already booked → finding (double payment) |
 | `TOOL_ALLOWLIST` / `READ_ONLY_TOOL` | `tools.dart`, `api.dart` | Only the two read-only tools run, args validated; every tool call in `audit_log.jsonl` |
 | Upload limits | `api.dart` | PDF / PNG / JPEG / WebP / text only, max 10 MB |
-| CORS | `api.dart` | Only localhost or `ALLOWED_ORIGINS` |
+| Origin check / CORS | `api.dart` | Only localhost or `ALLOWED_ORIGINS`; requests from any other browser origin get HTTP 403 |
+| Case ids | `api.dart` | Random 128-bit ids from server state, never from LLM output or the client |
 | Key isolation | `server.dart`, `tool/check.sh` | Key only in backend env; key scan before every push |
 
 ### SHIELD switch (before/after demo)
@@ -105,7 +106,8 @@ API and never sees the key or the raw invoice text the Checker works on.
 1. **Server-side key:** `GEMINI_API_KEY` is read by `backend/bin/server.dart`; it is never sent to the client.
 2. **Server-side rules:** the backend refuses to export blocked or unapproved invoices (HTTP 403), whatever
    the browser sends. Uploads are limited to PDF / images / text, max 10 MB.
-3. **CORS:** only localhost origins (or `ALLOWED_ORIGINS`) may call the API.
+3. **Origin check:** only localhost origins (or `ALLOWED_ORIGINS`) may call the API; other origins get HTTP 403.
+   The server listens on loopback only.
 4. **Audit log:** every agent decision goes to `backend/audit_log.jsonl`
    (`timestamp, case, agent, tool, args, action, decision (allowed|blocked|pending), rule, reason, shield`).
 5. **Never in the repo:** `.env` and `audit_log.jsonl` are git-ignored; `tool/check.sh` scans for keys.
@@ -177,14 +179,16 @@ backend/                    Dart API server (shelf) – the only part that talks
   lib/api.dart              HTTP routes, server-side case store, approval rules, audit_log.jsonl
   lib/agents.dart           Extractor → Checker → Approver → Exporter (prompts + hard limits)
   lib/guard.dart            Deterministic injection guard + §14 UStG rules
+  lib/tools.dart            Read-only Checker tools (lookup_supplier, check_duplicate) + allowlist
   lib/gemini_client.dart    Gemini REST client with model fallback
-  test/                     Guard, rules, agents and API tests (fake Gemini, no network)
+  test/                     Guard, rules, tools, agents and API tests (fake Gemini, no network)
 frontend/                   Flutter Web UI – never sees the API key
   lib/main.dart             App entry
   lib/theme.dart            Brand colours, theme, shared helpers (money, headline)
   lib/pages/home_page.dart  The page: state + flow, composes the components
   lib/components/           Global UI components, one per file (step_row, upload_card, invoice_details_card,
-                            recommendation_box, archive_card, audit_log, key_value, settings_dialog)
+                            recommendation_box, archive_card, audit_log, key_value, settings_dialog,
+                            shield_badge)
   lib/services/             api_client (backend calls), archive (IndexedDB/localStorage),
                             excel_export, settings (backend URL, auto-approve)
   web/index.html            Loading screen

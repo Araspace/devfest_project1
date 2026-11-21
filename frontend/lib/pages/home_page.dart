@@ -176,6 +176,8 @@ class _HomePageState extends State<HomePage> {
       c.decidedAt = DateTime.now();
     });
     if (!approved) {
+      final sid = c.serverId;
+      if (sid != null) _api.reject(sid, by: by).ignore(); // best effort: audit entry on the server
       _set(2, FlowState.failed, 'Rejected by $by');
       _set(3, FlowState.skipped, 'Nothing exported');
       _addLog(by == 'human' ? 'Human' : 'System', 'Rejected by $by – nothing written', level: LogLevel.block);
@@ -267,18 +269,20 @@ class _HomePageState extends State<HomePage> {
     children: [
       Row(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(color: Brand.okSoft, borderRadius: BorderRadius.circular(4)),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.lock_outline, size: 12, color: Brand.ok),
-                const SizedBox(width: 4),
-                Text('Guard active', style: mono(size: 11, color: Brand.ok)),
-              ],
+          // Only claim an active guard when the backend confirmed it (not offline, not SHIELD=off).
+          if (_shield == true)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(color: Brand.okSoft, borderRadius: BorderRadius.circular(4)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.lock_outline, size: 12, color: Brand.ok),
+                  const SizedBox(width: 4),
+                  Text('Guard active', style: mono(size: 11, color: Brand.ok)),
+                ],
+              ),
             ),
-          ),
           const Spacer(),
           IconButton(tooltip: 'Settings', onPressed: _openSettings, icon: const Icon(Icons.settings_outlined)),
         ],

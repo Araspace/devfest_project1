@@ -7,6 +7,7 @@
 //   POST /api/cases/<id>/check       Checker + guard + rules   → CheckResult
 //   POST /api/cases/<id>/recommend   Approver                  → ApprovalRecommendation
 //   POST /api/cases/<id>/export      Exporter (after approval) → BookingSuggestion
+//   POST /api/cases/<id>/reject      rejection → audit log, case dropped
 //   GET  /api/health                                           → {ok, model}
 //
 // The raw invoice text stays on the server, so the client cannot tamper with
@@ -15,6 +16,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:belegguard_shared/models.dart';
 import 'package:shelf/shelf.dart';
@@ -45,8 +47,14 @@ class Api {
   static const maxUploadBytes = 10 * 1024 * 1024;
   static const allowedMimeTypes = {'application/pdf', 'image/png', 'image/jpeg', 'image/webp', 'text/plain'};
 
+  /// Cases that were uploaded but never exported or rejected are dropped oldest-first.
+  static const maxOpenCases = 50;
+
   final _cases = <String, _Case>{};
-  var _nextId = 0;
+  final _random = Random.secure();
+
+  /// Unguessable case id: it is the only handle a client has on a case.
+  String _newId() => [for (var i = 0; i < 16; i++) _random.nextInt(256).toRadixString(16).padLeft(2, '0')].join();
 
   Handler get handler => const Pipeline().addMiddleware(_cors).addHandler(_route);
 
@@ -66,6 +74,7 @@ class Api {
           'check' => await _check(seg[2], c),
           'recommend' => await _recommend(seg[2], c),
           'export' => await _export(seg[2], c, req),
+          'reject' => await _reject(seg[2], req),
           _ => _error(404, 'Not found'),
         };
       }
@@ -74,10 +83,18 @@ class Api {
       return _error(502, e.message);
     } on FormatException catch (e) {
       return _error(400, 'Invalid request: ${e.message}');
+    } catch (e) {
+      // Never a stack trace for the client (or on stage).
+      stderr.writeln('Unhandled error on ${req.method} /${req.url.path}: $e');
+      return _error(500, 'Internal error – see the server log');
     }
   }
 
   Future<Response> _upload(Request req) async {
+    // Refuse oversized bodies before reading them (base64 is 4/3 of the file size).
+    if ((req.contentLength ?? 0) > maxUploadBytes * 4 ~/ 3 + 4096) {
+      return _error(413, 'File is empty or larger than 10 MB');
+    }
     final body = jsonDecode(await req.readAsString());
     if (body is! Map) return _error(400, 'Expected a JSON object');
     final name = body['file_name']?.toString() ?? 'receipt';
@@ -86,10 +103,13 @@ class Api {
     final bytes = base64Decode(body['data_base64']?.toString() ?? '');
     if (bytes.isEmpty || bytes.length > maxUploadBytes) return _error(413, 'File is empty or larger than 10 MB');
 
-    final id = '${DateTime.now().millisecondsSinceEpoch}-${_nextId++}';
+    final id = _newId();
     final c = _Case(UploadedDoc(name, mime, bytes));
-    _cases[id] = c;
     c.invoice = await agents.extract(c.doc);
+    while (_cases.length >= maxOpenCases) {
+      _cases.remove(_cases.keys.first);
+    }
+    _cases[id] = c; // only kept once the Extractor succeeded
     _audit(
       id,
       'extractor',
@@ -105,6 +125,7 @@ class Api {
   Future<Response> _check(String id, _Case c) async {
     final inv = c.invoice;
     if (inv == null) return _error(409, 'Extract first');
+    c.recommendation = null; // a new check invalidates an earlier recommendation
     c.check = await agents.check(inv);
     for (final t in agents.tools.drainCalls()) {
       _audit(
@@ -197,6 +218,25 @@ class Api {
     return _json(booking.toJson());
   }
 
+  /// Records a rejection (human, Approver agent or guard) and drops the case.
+  Future<Response> _reject(String id, Request req) async {
+    final body = jsonDecode(await req.readAsString());
+    final claimed = body is Map ? body['rejected_by']?.toString() : null;
+    final by = const {'human', 'approver agent', 'guard'}.contains(claimed) ? claimed! : 'unknown';
+    _audit(
+      id,
+      by,
+      'blocked',
+      'rejected',
+      'Rejected by $by – nothing written',
+      rule: 'APPROVAL_REQUIRED',
+      tool: 'export',
+      args: {'rejected_by': by},
+    );
+    _cases.remove(id);
+    return _json({'ok': true});
+  }
+
   void _audit(
     String caseId,
     String agent,
@@ -238,6 +278,9 @@ class Api {
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     };
+    // A browser page from any other origin is refused outright, so a foreign website
+    // cannot fire blind requests at the local API. Non-browser clients send no Origin.
+    if (origin != null && !ok) return _error(403, 'Origin not allowed');
     if (req.method == 'OPTIONS') return Response.ok('', headers: headers);
     return (await inner(req)).change(headers: headers);
   };

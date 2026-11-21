@@ -37,7 +37,7 @@ every step lands in an **audit log**, on screen and as its own sheet in the Exce
 
 ## 4. Live demo (3 min)
 
-Preparation: app open, Gemini key saved, three invoices ready on the desktop.
+Preparation: backend running (key in `.env`), app open, three invoices ready on the desktop.
 
 | Time | Step | What to say | What the audience sees |
 |---|---|---|---|
@@ -72,7 +72,7 @@ Ready-made in `samples/` (`.txt` and `.pdf`): `1_valid_invoice`, `2_missing_vat_
 ## 5. Architecture
 
 ```
-Flutter Web ──► Gemini API (generativelanguage.googleapis.com)
+Flutter Web ──► Dart backend (holds the key) ──► Gemini API (generativelanguage.googleapis.com)
    │
    ├─ Extractor ─► Checker (+ rules + guard) ─► Approver ─► human / auto ─► Exporter
    │                                                                          │
@@ -83,7 +83,7 @@ Flutter Web ──► Gemini API (generativelanguage.googleapis.com)
 - **Backend:** Dart API server (shelf) – runs the agents, holds the Gemini key, enforces the approval rules
 - **AI:** Google Gemini (`gemini-3.6-flash`, automatic fallback to other Flash models), one call per agent, JSON output
 - **Export:** `excel` package, download in the browser
-- **Code:** `lib/agents.dart` (agents), `lib/guard.dart` (rules + guard), `lib/home_page.dart` (UI)
+- **Code:** `backend/lib/agents.dart` (agents), `backend/lib/guard.dart` (rules + guard), `backend/lib/tools.dart` (Checker tools), `frontend/lib/pages/home_page.dart` (UI)
 
 ## 6. Why Gemini
 

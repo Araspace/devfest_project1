@@ -100,6 +100,38 @@ void main() {
     expect(code, 415);
   });
 
+  test('requests from a foreign browser origin are refused', () async {
+    final res = await api(
+      Request(
+        'POST',
+        Uri.parse('http://localhost/api/cases'),
+        headers: {'origin': 'https://evil.example'},
+        body: '{}',
+      ),
+    );
+    expect(res.statusCode, 403);
+    final local = await api(
+      Request('GET', Uri.parse('http://localhost/api/health'), headers: {'origin': 'http://localhost:5000'}),
+    );
+    expect(local.statusCode, 200);
+    expect(local.headers['access-control-allow-origin'], 'http://localhost:5000');
+  });
+
+  test('case ids are unguessable and a rejected case is gone', () async {
+    final a = await upload('1_valid_invoice');
+    final b = await upload('1_valid_invoice');
+    expect(a, isNot(b));
+    expect(a, matches(RegExp(r'^[0-9a-f]{32}$')));
+    expect((await post('api/cases/$a/reject', {'rejected_by': 'human'})).$1, 200);
+    expect((await post('api/cases/$a/check', {})).$1, 404);
+  });
+
+  test('malformed body gives a JSON error, not a crash', () async {
+    final (code, body) = await post('api/cases', [1, 2]);
+    expect(code, 400);
+    expect(body['error'], isNotNull);
+  });
+
   test('second upload of a booked invoice is flagged as duplicate', () async {
     final first = await upload('1_valid_invoice');
     await post('api/cases/$first/check', {});
