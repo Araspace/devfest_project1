@@ -3,85 +3,75 @@
 > "Qonto stores receipts. Our agents check them for legal compliance and resist manipulation."
 
 Multi-agent invoice checker for German invoices, built for the DevFest hackathon.
-Flutter Web frontend, three Gemini agents, human approval, Excel export.
+Flutter Web + Google Gemini API.
 
-## How it works
+## Flow
 
 ```
-Flutter Web → Upload → Extractor (Gemini) → Checker (Gemini + rules + guard) → Booker (Gemini)
-                                                        ↓
-                                        Approval screen (human) → Excel export
-                                                        ↓
-                                                    Audit log
+Invoice (PDF / image)
+   │
+   ▼
+Extractor agent ── reads the document → structured JSON
+   │
+   ▼
+Checker agent ──── §14 UStG mandatory details, VAT rate, sums, hidden prompt injection
+   │                 + deterministic rules and injection guard (can only make it stricter)
+   ▼
+Approver agent ─── recommends approve / reject / human review
+   │                 → you decide (default) or the agent decides clear cases (setting)
+   ▼
+Exporter agent ─── SKR03 account, contra account, DATEV tax code → Excel download
+   │
+   ▼
+Audit log (on screen + "Audit-Log" sheet in the Excel file)
 ```
 
-| Agent | Job | Output |
-|---|---|---|
-| **Extractor** | Reads the invoice (PDF / image / text) | supplier, date, net, VAT, gross, VAT ID, invoice no., full raw text, suspicious text |
-| **Checker** | §14 Abs. 4 UStG mandatory details, VAT rate (0/7/19 %), arithmetic, hidden prompt injection | status `ok` / `warning` / `blocked`, issues, reasoning |
-| **Booker** | Suggests SKR03 account, contra account, DATEV tax code | booking + reasoning + confidence |
-
-Each agent is a separate Gemini call (`firebase_ai`, Gemini Developer API) with its own fixed system instruction and JSON output.
+Each agent is a separate call to the Gemini API (`generativelanguage.googleapis.com`) with its
+own fixed system instruction and JSON output. Default model: `gemini-2.5-flash`.
 
 ## Security
 
-- Invoice content is passed as quoted data inside `<untrusted_invoice_text>` – never as instructions. Attempts to close that tag from inside the document are removed.
-- A deterministic guard (`lib/guard.dart`) scans the raw text for injection patterns and invisible Unicode. It can only make the result stricter: if it fires, the invoice is **blocked**, no matter what the LLM says.
-- §14 UStG checks also run as deterministic rules next to the LLM Checker.
-- Agents only read and suggest. The Excel file is written only after a human clicks **Approve**. Blocked invoices cannot be approved and are never sent to the Booker.
-- Every step is logged on screen and exported to the `Audit-Log` sheet.
+- The invoice is passed as quoted, untrusted data – never as instructions.
+- Only the Extractor sees the original file. Approver and Exporter only get structured fields.
+- A deterministic guard (`lib/guard.dart`) scans the text for injection patterns and invisible
+  Unicode. If it fires, the invoice is **blocked** – no agent can approve it.
+- The Approver agent can never approve an invoice that has open findings; those go to a human.
+- Nothing is written until the invoice is approved.
 
 ## Run
 
-Offline demo (no Firebase needed – heuristic stand-in agents, same UI and flow):
+1. Get a Gemini API key at https://aistudio.google.com/apikey
+2. Start the app and paste the key when asked (stored only in your browser):
 
 ```bash
 flutter run -d chrome
 ```
 
-With Gemini:
-
-1. Create a Firebase project, add a Web app, and enable **Firebase AI Logic** with the Gemini Developer API.
-2. Pass the web config at build time (nothing is committed):
+Or bake it in for a demo machine (never commit it):
 
 ```bash
-flutter run -d chrome \
-  --dart-define=FIREBASE_API_KEY=... \
-  --dart-define=FIREBASE_APP_ID=... \
-  --dart-define=FIREBASE_PROJECT_ID=... \
-  --dart-define=FIREBASE_MESSAGING_SENDER_ID=... \
-  --dart-define=GEMINI_MODEL=gemini-2.5-flash
+flutter run -d chrome --dart-define=GEMINI_API_KEY=your-key
 ```
 
-The toggle in the top-right switches between Gemini and the offline demo agents.
+Settings (top right): Gemini model, and "Let the Approver agent decide".
 
-## Demo (3 min)
-
-Use the sample chips in the app (`assets/samples/`):
-
-1. **Valid invoice** → agents reason → approve → Excel downloaded (`Buchungen` + `Audit-Log` sheets)
-2. **Missing VAT ID** → flagged (§14 Abs. 4 Nr. 2 UStG)
-3. **Prompt injection** → blocked, evidence quoted in the results card and the log
-
-## Tests
+Build for hosting:
 
 ```bash
-flutter test
+flutter build web --no-tree-shake-icons
 ```
-
-Runs the full pipeline (offline agents) on the three sample invoices.
 
 ## Project layout
 
 ```
 lib/
-  main.dart          Firebase init from --dart-define, app shell
-  home_page.dart     Upload, results card, approve/reject, audit log
-  agents.dart        Extractor, Checker, Booker + pipeline (Gemini)
-  demo_agents.dart   Offline stand-ins with the same JSON contract
-  guard.dart         Injection guard + §14 UStG rules
-  excel_export.dart  Excel export after approval
-  models.dart        Data models
-assets/samples/      3 test invoices
-docs/PLAN.md         Hackathon plan
+  main.dart           Theme (orange / purple, Bricolage Grotesque header)
+  home_page.dart      Upload, 4-step flow, decision, invoice data, audit log
+  agents.dart         Extractor, Checker, Approver, Exporter
+  gemini_client.dart  Gemini REST client
+  guard.dart          Injection guard + §14 UStG rules
+  excel_export.dart   Excel export
+  settings.dart       API key / model / auto-approve (localStorage)
+  models.dart         Data models
+docs/PLAN.md          Hackathon plan
 ```

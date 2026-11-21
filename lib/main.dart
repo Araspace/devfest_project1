@@ -1,59 +1,84 @@
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'home_page.dart';
 
-/// Firebase web config comes from --dart-define so no keys live in the repo.
-/// Without it the app runs with the offline demo agents.
-class AppConfig {
-  static const apiKey = String.fromEnvironment('FIREBASE_API_KEY');
-  static const appId = String.fromEnvironment('FIREBASE_APP_ID');
-  static const projectId = String.fromEnvironment('FIREBASE_PROJECT_ID');
-  static const senderId = String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID');
-  static const model = String.fromEnvironment('GEMINI_MODEL', defaultValue: 'gemini-2.5-flash');
-
-  static bool get hasFirebase => apiKey.isNotEmpty && appId.isNotEmpty && projectId.isNotEmpty;
+/// Brand colours: orange surfaces and actions, purple symbols.
+class Brand {
+  static const orange = Color(0xFFF97316);
+  static const orangeDark = Color(0xFFC2410C);
+  static const orangeSoft = Color(0xFFFFEDD5);
+  static const cream = Color(0xFFFFF7ED);
+  static const purple = Color(0xFF7C3AED);
+  static const purpleSoft = Color(0xFFEDE9FE);
+  static const ink = Color(0xFF1C1917);
+  static const muted = Color(0xFF78716C);
+  static const line = Color(0xFFFED7AA);
+  static const green = Color(0xFF15803D);
+  static const red = Color(0xFFDC2626);
 }
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  var live = false;
-  String? initError;
-  if (AppConfig.hasFirebase) {
-    try {
-      await Firebase.initializeApp(
-        options: const FirebaseOptions(
-          apiKey: AppConfig.apiKey,
-          appId: AppConfig.appId,
-          projectId: AppConfig.projectId,
-          messagingSenderId: AppConfig.senderId,
-        ),
-      );
-      live = true;
-    } catch (e) {
-      initError = 'Firebase init failed, using offline demo agents: $e';
-    }
-  }
-  runApp(BelegGuardApp(liveAvailable: live, initError: initError));
-}
+void main() => runApp(const BelegGuardApp());
 
 class BelegGuardApp extends StatelessWidget {
-  const BelegGuardApp({super.key, required this.liveAvailable, this.initError});
-  final bool liveAvailable;
-  final String? initError;
+  const BelegGuardApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    ThemeData theme(Brightness b) => ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2B4BA0), brightness: b),
-          useMaterial3: true,
-        );
+    final scheme = ColorScheme.fromSeed(
+      seedColor: Brand.orange,
+      primary: Brand.orange,
+      onPrimary: Colors.white,
+      secondary: Brand.purple,
+      surface: Colors.white,
+      onSurface: Brand.ink,
+      error: Brand.red,
+    );
+    final base = ThemeData(colorScheme: scheme, useMaterial3: true);
     return MaterialApp(
       title: 'BelegGuard',
       debugShowCheckedModeBanner: false,
-      theme: theme(Brightness.light),
-      darkTheme: theme(Brightness.dark),
-      home: HomePage(liveAvailable: liveAvailable, initError: initError, modelName: AppConfig.model),
+      theme: base.copyWith(
+        scaffoldBackgroundColor: Brand.cream,
+        textTheme: base.textTheme.apply(fontFamily: GoogleFonts.inter().fontFamily, bodyColor: Brand.ink, displayColor: Brand.ink),
+        iconTheme: const IconThemeData(color: Brand.purple),
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          elevation: 0,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: Brand.line),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: Brand.orange,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Brand.ink,
+            side: const BorderSide(color: Brand.line, width: 1.5),
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Brand.cream,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Brand.line)),
+          enabledBorder:
+              OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Brand.line)),
+          focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Brand.orange, width: 2)),
+        ),
+      ),
+      home: const HomePage(),
     );
   }
 }

@@ -1,439 +1,669 @@
-import 'dart:convert';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'agents.dart';
 import 'excel_export.dart';
+import 'gemini_client.dart';
+import 'main.dart' show Brand;
 import 'models.dart';
+import 'settings.dart';
 
-const _samples = <(String, String, IconData)>[
-  ('Valid invoice', 'assets/samples/01_valid_buerobedarf.txt', Icons.check_circle_outline),
-  ('Missing VAT ID', 'assets/samples/02_missing_vat_id.txt', Icons.report_gmailerrorred),
-  ('Prompt injection', 'assets/samples/03_prompt_injection.txt', Icons.gpp_bad_outlined),
-];
+enum StepState { idle, running, done, warning, failed, waiting, skipped }
+
+class FlowStep {
+  FlowStep(this.title, this.agent, this.icon);
+  final String title;
+  final String agent;
+  final IconData icon;
+  StepState state = StepState.idle;
+  String summary = '';
+}
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.liveAvailable, required this.modelName, this.initError});
-  final bool liveAvailable;
-  final String modelName;
-  final String? initError;
-
+  const HomePage({super.key});
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  late bool _live = widget.liveAvailable;
-  bool _busy = false;
-  PipelineResult? _result;
-  final List<PipelineResult> _approved = [];
+  final _steps = [
+    FlowStep('Extract', 'Extractor agent', Icons.document_scanner_outlined),
+    FlowStep('Check', 'Checker agent', Icons.policy_outlined),
+    FlowStep('Approve', 'Approver agent + you', Icons.how_to_reg_outlined),
+    FlowStep('Export', 'Exporter agent', Icons.table_view_outlined),
+  ];
   final List<LogEntry> _log = [];
-  final _logScroll = ScrollController();
+  final List<InvoiceCase> _approved = [];
+  InvoiceCase? _case;
+  bool _busy = false;
+  String? _error;
 
-  @override
-  void initState() {
-    super.initState();
-    _addLog(LogEntry('System',
-        widget.liveAvailable ? 'Firebase connected. Gemini agents ready.' : 'No Firebase config – running offline demo agents.'));
-    if (widget.initError != null) _addLog(LogEntry('System', widget.initError!, level: LogLevel.warn));
-  }
+  bool get _hasKey => Settings.apiKey.isNotEmpty;
+  Agents get _agents => Agents(GeminiClient(apiKey: Settings.apiKey, model: Settings.model));
 
-  void _addLog(LogEntry e) {
-    setState(() => _log.add(e));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_logScroll.hasClients) {
-        _logScroll.animateTo(_logScroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
-      }
-    });
-  }
+  void _log_(String actor, String msg, {LogLevel level = LogLevel.info, String? detail}) =>
+      setState(() => _log.insert(0, LogEntry(actor, msg, level: level, detail: detail)));
 
-  static String _mime(String name) {
-    final ext = name.split('.').last.toLowerCase();
-    return switch (ext) {
-      'pdf' => 'application/pdf',
-      'png' => 'image/png',
-      'jpg' || 'jpeg' => 'image/jpeg',
-      'webp' => 'image/webp',
-      'heic' => 'image/heic',
-      'txt' || 'md' => 'text/plain',
-      _ => 'application/octet-stream',
-    };
-  }
+  void _set(int i, StepState s, [String summary = '']) => setState(() {
+        _steps[i].state = s;
+        _steps[i].summary = summary;
+      });
 
-  Future<void> _pickFile() async {
+  static String _mime(String name) => switch (name.split('.').last.toLowerCase()) {
+        'pdf' => 'application/pdf',
+        'png' => 'image/png',
+        'jpg' || 'jpeg' => 'image/jpeg',
+        'webp' => 'image/webp',
+        'txt' => 'text/plain',
+        _ => 'application/octet-stream',
+      };
+
+  static String _money(double? v) => v == null ? '—' : '${v.toStringAsFixed(2)} €';
+
+  // ------------------------------------------------------------------ flow
+
+  Future<void> _pick() async {
     final files = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'txt'],
     );
     if (files.isEmpty) return;
     final f = files.first;
-    await _process(UploadedDoc(f.name, _mime(f.name), await f.readAsBytes()));
+    await _run(UploadedDoc(f.name, _mime(f.name), await f.readAsBytes()));
   }
 
-  Future<void> _loadSample(String path) async {
-    final data = await rootBundle.loadString(path);
-    await _process(UploadedDoc(path.split('/').last, 'text/plain', utf8.encode(data)));
-  }
-
-  Future<void> _process(UploadedDoc doc) async {
+  Future<void> _run(UploadedDoc doc) async {
+    final c = InvoiceCase(doc.name);
     setState(() {
+      _case = c;
       _busy = true;
-      _result = null;
+      _error = null;
+      for (final s in _steps) {
+        s.state = StepState.idle;
+        s.summary = '';
+      }
     });
+    _log_('System', 'Invoice received: ${doc.name} (${(doc.bytes.length / 1024).toStringAsFixed(0)} KB)');
+    var i = 0;
     try {
-      final agents = Agents(live: _live, modelName: widget.modelName);
-      final r = await agents.run(doc, _addLog);
-      setState(() => _result = r);
+      // 1 · Extract
+      _set(i, StepState.running, 'Reading the document…');
+      final inv = await _agents.extract(doc);
+      c.invoice = inv;
+      _set(i, StepState.done, '${inv.supplierName ?? 'Unknown supplier'} · ${_money(inv.gross)}');
+      _log_('Extractor', 'Extracted ${inv.supplierName ?? '?'}, invoice ${inv.invoiceNumber ?? '?'}, ${_money(inv.gross)}',
+          detail: inv.reasoning);
+
+      // 2 · Check
+      i = 1;
+      _set(i, StepState.running, 'Checking §14 UStG, VAT and hidden instructions…');
+      final chk = await _agents.check(inv);
+      c.check = chk;
+      final n = chk.issues.length;
+      switch (chk.status) {
+        case CheckStatus.ok:
+          _set(i, StepState.done, 'Compliant – no issues');
+          _log_('Checker', 'Compliant', detail: chk.reasoning);
+        case CheckStatus.warning:
+          _set(i, StepState.warning, '$n issue${n == 1 ? '' : 's'} found');
+          _log_('Checker', '$n issue(s): ${chk.issues.map((e) => e.code).join(', ')}',
+              level: LogLevel.warn, detail: chk.reasoning);
+        case CheckStatus.blocked:
+          _set(i, StepState.failed, 'Blocked – manipulation detected');
+          _log_('Checker', 'BLOCKED: hidden instructions in the invoice', level: LogLevel.block,
+              detail: chk.injectionEvidence.join('\n'));
+      }
+
+      // 3 · Approve
+      i = 2;
+      _set(i, StepState.running, 'Approver agent is reviewing…');
+      final rec = await _agents.recommend(inv, chk);
+      c.recommendation = rec;
+      _log_('Approver', 'Recommends: ${rec.decision.replaceAll('_', ' ')}', detail: rec.reasoning);
+
+      if (chk.status == CheckStatus.blocked) {
+        _decide(c, approved: false, by: 'guard');
+      } else if (Settings.autoApprove && rec.decision == 'approve') {
+        _decide(c, approved: true, by: 'approver agent');
+      } else if (Settings.autoApprove && rec.decision == 'reject') {
+        _decide(c, approved: false, by: 'approver agent');
+      } else {
+        _set(i, StepState.waiting, 'Your decision is needed');
+        _log_('System', 'Waiting for human approval – nothing written yet', level: LogLevel.human);
+      }
+    } on GeminiException catch (e) {
+      _fail(i, e.message);
     } catch (e) {
-      _addLog(LogEntry('System', 'Pipeline error: $e', level: LogLevel.block));
+      _fail(i, 'Unexpected error: $e');
     } finally {
       setState(() => _busy = false);
     }
   }
 
-  void _approve() {
-    final r = _result!;
-    setState(() {
-      r.decision = 'approved';
-      r.decidedAt = DateTime.now();
-      _approved.add(r);
-    });
-    _addLog(LogEntry('Human', 'APPROVED ${r.fileName} – booking ${r.booking?.account} an ${r.booking?.contraAccount}',
-        level: LogLevel.human));
-    final name = ExcelExport.download(_approved, _log);
-    _addLog(LogEntry('System', 'Excel written after approval: $name (${_approved.length} booking(s))', level: LogLevel.human));
+  void _fail(int i, String msg) {
+    _set(i, StepState.failed, 'Failed');
+    setState(() => _error = msg);
+    _log_('System', msg, level: LogLevel.block);
   }
 
-  void _reject() {
-    final r = _result!;
+  Future<void> _decide(InvoiceCase c, {required bool approved, required String by}) async {
     setState(() {
-      r.decision = 'rejected';
-      r.decidedAt = DateTime.now();
+      c.decision = approved ? 'approved' : 'rejected';
+      c.decidedBy = by;
+      c.decidedAt = DateTime.now();
     });
-    _addLog(LogEntry('Human', 'REJECTED ${r.fileName}. Nothing written.', level: LogLevel.human));
+    if (!approved) {
+      _set(2, StepState.failed, 'Rejected by $by');
+      _set(3, StepState.skipped, 'Nothing exported');
+      _log_(by == 'human' ? 'Human' : 'System', 'Rejected by $by – nothing written', level: LogLevel.block);
+      return;
+    }
+    _set(2, StepState.done, 'Approved by $by');
+    _log_(by == 'human' ? 'Human' : 'Approver', 'Approved by $by', level: LogLevel.human);
+
+    setState(() => _busy = true);
+    try {
+      _set(3, StepState.running, 'Mapping to SKR03 and writing Excel…');
+      final b = await _agents.export(c.invoice!);
+      c.booking = b;
+      _approved.add(c);
+      final file = ExcelExport.download(_approved, _log.reversed.toList());
+      _set(3, StepState.done, '${b.account} ${b.accountName ?? ''} → $file');
+      _log_('Exporter', 'Booked ${b.account} an ${b.contraAccount} (BU ${b.taxCode ?? '-'}), Excel downloaded',
+          level: LogLevel.human, detail: b.reasoning);
+    } on GeminiException catch (e) {
+      _fail(3, e.message);
+    } finally {
+      setState(() => _busy = false);
+    }
   }
+
+  // ------------------------------------------------------------------ UI
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('BelegGuard', style: TextStyle(fontWeight: FontWeight.w700)),
-            Text('Agents check receipts for §14 UStG compliance – and resist manipulation.',
-                style: TextStyle(fontSize: 12)),
-          ],
-        ),
-        actions: [
-          Tooltip(
-            message: widget.liveAvailable ? 'Use Gemini via Firebase AI Logic' : 'Start with --dart-define Firebase config to enable',
-            child: Row(children: [
-              Text(_live ? 'Gemini live' : 'Offline demo', style: TextStyle(color: cs.onSurfaceVariant)),
-              Switch(value: _live, onChanged: widget.liveAvailable && !_busy ? (v) => setState(() => _live = v) : null),
-            ]),
-          ),
-          const SizedBox(width: 12),
-        ],
-      ),
-      body: LayoutBuilder(builder: (context, c) {
-        final wide = c.maxWidth > 1000;
-        final main = ListView(padding: const EdgeInsets.all(16), children: [
-          _uploadCard(),
-          if (_busy) const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: LinearProgressIndicator()),
-          if (_result != null) _ResultCard(result: _result!, onApprove: _approve, onReject: _reject),
-          if (!wide) SizedBox(height: 420, child: _LogPanel(log: _log, controller: _logScroll)),
-        ]);
-        if (!wide) return main;
-        return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Expanded(child: main),
-          SizedBox(
-            width: 440,
+      body: SingleChildScrollView(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(0, 16, 16, 16),
-              child: _LogPanel(log: _log, controller: _logScroll),
+              padding: const EdgeInsets.fromLTRB(20, 48, 20, 64),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                _header(),
+                const SizedBox(height: 40),
+                _hasKey ? _uploadCard() : _ApiKeyCard(onSaved: () => setState(() {})),
+                if (_case != null) ...[
+                  const SizedBox(height: 28),
+                  _flowCard(),
+                ],
+                if (_case?.invoice != null) ...[
+                  const SizedBox(height: 28),
+                  _detailsCard(),
+                ],
+                const SizedBox(height: 28),
+                _AuditLog(log: _log),
+              ]),
             ),
           ),
-        ]);
-      }),
+        ),
+      ),
     );
+  }
+
+  Widget _header() {
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.shield_outlined, color: Brand.purple, size: 44),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text('BelegGuard',
+                  style: GoogleFonts.bricolageGrotesque(
+                      fontSize: 64, fontWeight: FontWeight.w600, color: Brand.ink, height: 1.0, letterSpacing: -1.5)),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          const Text('AI agents check your invoices for legal compliance – and resist manipulation.',
+              style: TextStyle(fontSize: 17, color: Brand.muted)),
+        ]),
+      ),
+      IconButton(
+        tooltip: 'Settings',
+        onPressed: _openSettings,
+        icon: const Icon(Icons.tune, color: Brand.purple),
+      ),
+    ]);
   }
 
   Widget _uploadCard() {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('1. Upload an invoice', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          const Text('PDF, image or text. Extractor → Checker → Booker run one after another; you decide at the end.'),
-          const SizedBox(height: 16),
-          Wrap(spacing: 12, runSpacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            FilledButton.icon(
-              onPressed: _busy ? null : _pickFile,
-              icon: const Icon(Icons.upload_file),
-              label: const Text('Upload invoice'),
-            ),
-            const Text('or try a sample:'),
-            for (final (label, path, icon) in _samples)
-              ActionChip(
-                avatar: Icon(icon, size: 18),
-                label: Text(label),
-                onPressed: _busy ? null : () => _loadSample(path),
-              ),
-          ]),
+        padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+        child: Column(children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: const BoxDecoration(color: Brand.purpleSoft, shape: BoxShape.circle),
+            child: const Icon(Icons.upload_file_rounded, size: 36, color: Brand.purple),
+          ),
+          const SizedBox(height: 18),
+          Text('Drop in an invoice',
+              style: GoogleFonts.bricolageGrotesque(fontSize: 26, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          const Text('PDF, JPG, PNG or WEBP', style: TextStyle(color: Brand.muted)),
+          const SizedBox(height: 22),
+          FilledButton.icon(
+            onPressed: _busy ? null : _pick,
+            icon: _busy
+                ? const SizedBox(
+                    width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.add_rounded),
+            label: Text(_busy ? 'Agents at work…' : 'Choose invoice'),
+          ),
           if (_approved.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             TextButton.icon(
-              onPressed: () => ExcelExport.download(_approved, _log),
-              icon: const Icon(Icons.download),
-              label: Text('Download Excel again (${_approved.length} approved)'),
+              onPressed: () => ExcelExport.download(_approved, _log.reversed.toList()),
+              icon: const Icon(Icons.download_rounded, color: Brand.purple),
+              label: Text('Download Excel (${_approved.length} booked)', style: const TextStyle(color: Brand.ink)),
             ),
           ],
         ]),
       ),
     );
   }
-}
 
-// ---------------------------------------------------------------- Result card
-
-class _ResultCard extends StatelessWidget {
-  const _ResultCard({required this.result, required this.onApprove, required this.onReject});
-  final PipelineResult result;
-  final VoidCallback onApprove;
-  final VoidCallback onReject;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    final cs = Theme.of(context).colorScheme;
-    final inv = result.invoice;
-    final chk = result.check;
-    final b = result.booking;
-    final blocked = chk.status == CheckStatus.blocked;
-    final (statusColor, statusLabel, statusIcon) = switch (chk.status) {
-      CheckStatus.ok => (Colors.green.shade700, 'Compliant', Icons.verified),
-      CheckStatus.warning => (Colors.orange.shade800, 'Needs attention', Icons.warning_amber),
-      CheckStatus.blocked => (cs.error, 'Blocked – manipulation detected', Icons.gpp_bad),
-    };
-    String money(double? v) => v == null ? '—' : '${v.toStringAsFixed(2)} €';
-
+  Widget _flowCard() {
+    final c = _case!;
+    final waiting = _steps[2].state == StepState.waiting;
     return Card(
-      margin: const EdgeInsets.only(top: 16),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(28),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(child: Text('2. Agent results · ${result.fileName}', style: t.titleMedium)),
-            Chip(
-              avatar: Icon(statusIcon, color: statusColor, size: 18),
-              label: Text(statusLabel, style: TextStyle(color: statusColor, fontWeight: FontWeight.w600)),
-              side: BorderSide(color: statusColor),
+          Text(c.fileName, style: GoogleFonts.bricolageGrotesque(fontSize: 22, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 22),
+          for (var i = 0; i < _steps.length; i++) _StepRow(step: _steps[i], last: i == _steps.length - 1),
+          if (_error != null)
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(12)),
+              child: Text(_error!, style: const TextStyle(color: Brand.red)),
             ),
-          ]),
-          const Divider(height: 28),
-          _AgentSection(
-            title: 'Extractor',
-            icon: Icons.document_scanner_outlined,
-            reasoning: inv.reasoning,
-            child: Wrap(spacing: 24, runSpacing: 8, children: [
-              _kv('Supplier', inv.supplierName),
-              _kv('VAT ID', inv.vatId ?? (inv.taxNumber != null ? 'St.-Nr. ${inv.taxNumber}' : null)),
-              _kv('Invoice no.', inv.invoiceNumber),
-              _kv('Date', inv.invoiceDate),
-              _kv('Delivery', inv.deliveryDate),
-              _kv('Net', money(inv.net)),
-              _kv('VAT', '${money(inv.vat)}${inv.vatRate != null ? ' (${inv.vatRate!.round()} %)' : ''}'),
-              _kv('Gross', money(inv.gross)),
-              _kv('Description', inv.description),
-            ]),
-          ),
-          _AgentSection(
-            title: 'Checker',
-            icon: Icons.rule,
-            reasoning: chk.reasoning,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (chk.issues.isEmpty) const Text('No issues found.'),
-              for (final i in chk.issues)
-                ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    switch (i.severity) {
-                      Severity.critical => Icons.gpp_bad,
-                      Severity.error => Icons.error_outline,
-                      Severity.warning => Icons.warning_amber,
-                      Severity.info => Icons.info_outline,
-                    },
-                    color: i.severity.index >= Severity.error.index ? cs.error : Colors.orange.shade800,
-                  ),
-                  title: Text(i.message),
-                  subtitle: Text('${i.code} · via ${i.source}'),
-                ),
-              if (chk.injectionEvidence.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(8)),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Hidden instructions found (quoted, not followed):',
-                        style: TextStyle(color: cs.onErrorContainer, fontWeight: FontWeight.w600)),
-                    for (final e in chk.injectionEvidence)
-                      Text('“$e”', style: TextStyle(color: cs.onErrorContainer, fontFamily: 'monospace', fontSize: 12)),
-                  ]),
-                ),
-              ],
-            ]),
-          ),
-          _AgentSection(
-            title: 'Booker',
-            icon: Icons.account_balance_outlined,
-            reasoning: b?.reasoning ?? '',
-            child: b == null
-                ? const Text('Skipped – blocked invoices are never booked.')
-                : Wrap(spacing: 24, runSpacing: 8, children: [
-                    _kv('Account (SKR03)', '${b.account} ${b.accountName ?? ''}'),
-                    _kv('Contra account', '${b.contraAccount} ${b.contraAccountName ?? ''}'),
-                    _kv('Tax code (BU)', b.taxCode?.isEmpty ?? true ? '—' : b.taxCode),
-                    _kv('Booking text', b.bookingText),
-                    _kv('Confidence', b.confidence == null ? null : '${(b.confidence! * 100).round()} %'),
-                  ]),
-          ),
-          const Divider(height: 28),
-          Text('3. Human decision', style: t.titleMedium),
-          const SizedBox(height: 8),
-          if (result.decision == 'pending')
-            Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              Tooltip(
-                message: blocked ? 'Blocked invoices cannot be approved' : 'Writes the booking to Excel',
-                child: FilledButton.icon(
-                  onPressed: blocked ? null : onApprove,
-                  icon: const Icon(Icons.check),
-                  label: const Text('Approve & export Excel'),
-                ),
+          if (waiting) ...[
+            const SizedBox(height: 8),
+            _recommendationBox(c.recommendation!),
+            const SizedBox(height: 16),
+            Wrap(spacing: 12, runSpacing: 12, children: [
+              FilledButton.icon(
+                onPressed: () => _decide(c, approved: true, by: 'human'),
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Approve & export'),
               ),
-              OutlinedButton.icon(onPressed: onReject, icon: const Icon(Icons.close), label: const Text('Reject')),
-              if (chk.status == CheckStatus.warning)
-                Text('Check the issues above before approving.', style: TextStyle(color: Colors.orange.shade800)),
-            ])
-          else
-            Row(children: [
-              Icon(result.decision == 'approved' ? Icons.check_circle : Icons.cancel,
-                  color: result.decision == 'approved' ? Colors.green.shade700 : cs.error),
-              const SizedBox(width: 8),
-              Text(result.decision == 'approved' ? 'Approved – Excel downloaded.' : 'Rejected – nothing written.',
-                  style: t.bodyLarge),
+              OutlinedButton.icon(
+                onPressed: () => _decide(c, approved: false, by: 'human'),
+                icon: const Icon(Icons.close_rounded, color: Brand.purple),
+                label: const Text('Reject'),
+              ),
             ]),
+          ],
         ]),
       ),
     );
   }
 
-  Widget _kv(String k, String? v) => ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 140, maxWidth: 320),
+  Widget _recommendationBox(ApprovalRecommendation r) {
+    final label = switch (r.decision) {
+      'approve' => 'Approver agent recommends: approve',
+      'reject' => 'Approver agent recommends: reject',
+      _ => 'Approver agent recommends: human review',
+    };
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Brand.purpleSoft, borderRadius: BorderRadius.circular(14)),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Icon(Icons.auto_awesome, color: Brand.purple, size: 20),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+            if (r.reasoning.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(r.reasoning, style: const TextStyle(color: Brand.muted)),
+            ],
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _detailsCard() {
+    final c = _case!;
+    final inv = c.invoice!;
+    final chk = c.check;
+    final b = c.booking;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(k, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-          Text(v ?? '— missing —', style: TextStyle(fontWeight: FontWeight.w600, color: v == null ? Colors.red : null)),
+          Text('Invoice data', style: GoogleFonts.bricolageGrotesque(fontSize: 22, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 18),
+          Wrap(runSpacing: 16, children: [
+            _kv('Supplier', inv.supplierName),
+            _kv('Invoice no.', inv.invoiceNumber),
+            _kv('Date', inv.invoiceDate),
+            _kv('VAT ID', inv.vatId ?? (inv.taxNumber != null ? 'St.-Nr. ${inv.taxNumber}' : null)),
+            _kv('Net', _money(inv.net)),
+            _kv('VAT', inv.vat == null ? null : '${_money(inv.vat)}${inv.vatRate != null ? ' · ${inv.vatRate!.round()} %' : ''}'),
+            _kv('Gross', _money(inv.gross)),
+            _kv('Delivery', inv.deliveryDate),
+          ]),
+          if (chk != null && chk.issues.isNotEmpty) ...[
+            const Divider(height: 40, color: Brand.line),
+            const Text('Findings', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+            const SizedBox(height: 10),
+            for (final i in chk.issues)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Icon(
+                    i.severity == Severity.critical
+                        ? Icons.gpp_bad_outlined
+                        : i.severity == Severity.error
+                            ? Icons.error_outline
+                            : Icons.info_outline,
+                    size: 20,
+                    color: Brand.purple,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(i.message)),
+                ]),
+              ),
+            if (chk.injectionEvidence.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: Brand.cream, borderRadius: BorderRadius.circular(12)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Quoted, not followed:', style: TextStyle(fontWeight: FontWeight.w600, color: Brand.muted)),
+                  const SizedBox(height: 6),
+                  for (final e in chk.injectionEvidence.take(3))
+                    Text('“$e”', style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Brand.ink)),
+                ]),
+              ),
+            ],
+          ],
+          if (b != null) ...[
+            const Divider(height: 40, color: Brand.line),
+            const Text('Booking (SKR03)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+            const SizedBox(height: 14),
+            Wrap(runSpacing: 16, children: [
+              _kv('Account', '${b.account} ${b.accountName ?? ''}'),
+              _kv('Contra account', '${b.contraAccount} ${b.contraAccountName ?? ''}'),
+              _kv('Tax code', (b.taxCode ?? '').isEmpty ? '—' : b.taxCode),
+              _kv('Booking text', b.bookingText),
+            ]),
+          ],
         ]),
+      ),
+    );
+  }
+
+  Widget _kv(String k, String? v) => SizedBox(
+        width: 230,
+        child: Padding(
+          padding: const EdgeInsets.only(right: 16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(k.toUpperCase(),
+                style: const TextStyle(fontSize: 11, letterSpacing: 0.8, color: Brand.muted, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            Text(v ?? 'missing',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: v == null ? Brand.red : Brand.ink)),
+          ]),
+        ),
       );
+
+  Future<void> _openSettings() async {
+    await showDialog<void>(context: context, builder: (_) => const _SettingsDialog());
+    setState(() {});
+  }
 }
 
-class _AgentSection extends StatelessWidget {
-  const _AgentSection({required this.title, required this.icon, required this.child, required this.reasoning});
-  final String title;
-  final IconData icon;
-  final Widget child;
-  final String reasoning;
+// --------------------------------------------------------------- step row
+
+class _StepRow extends StatelessWidget {
+  const _StepRow({required this.step, required this.last});
+  final FlowStep step;
+  final bool last;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(icon, color: cs.primary),
-          const SizedBox(width: 8),
-          Text('$title agent', style: Theme.of(context).textTheme.titleSmall),
+    final (bg, fg, badge) = switch (step.state) {
+      StepState.idle => (Brand.cream, Brand.muted, null),
+      StepState.running => (Brand.purpleSoft, Brand.purple, null),
+      StepState.done => (Brand.purpleSoft, Brand.purple, Icons.check_circle),
+      StepState.warning => (Brand.orangeSoft, Brand.orangeDark, Icons.warning_rounded),
+      StepState.waiting => (Brand.orangeSoft, Brand.orangeDark, Icons.hourglass_top_rounded),
+      StepState.failed => (const Color(0xFFFEE2E2), Brand.red, Icons.cancel),
+      StepState.skipped => (Brand.cream, Brand.muted, Icons.remove_circle_outline),
+    };
+    return IntrinsicHeight(
+      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Column(children: [
+          Stack(clipBehavior: Clip.none, children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+              child: step.state == StepState.running
+                  ? const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: CircularProgressIndicator(strokeWidth: 2.5, color: Brand.purple))
+                  : Icon(step.icon, color: step.state == StepState.idle ? Brand.muted : Brand.purple),
+            ),
+            if (badge != null)
+              Positioned(
+                right: -4,
+                bottom: -4,
+                child: Container(
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                  child: Icon(badge, size: 18, color: fg),
+                ),
+              ),
+          ]),
+          if (!last) Expanded(child: Container(width: 2, margin: const EdgeInsets.symmetric(vertical: 6), color: Brand.line)),
         ]),
-        const SizedBox(height: 10),
-        child,
-        if (reasoning.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(8)),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(Icons.psychology_outlined, size: 18, color: cs.onSurfaceVariant),
-              const SizedBox(width: 8),
-              Expanded(child: Text(reasoning, style: TextStyle(color: cs.onSurfaceVariant))),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(top: 4, bottom: last ? 4 : 22),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Text(step.title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                const SizedBox(width: 8),
+                Text(step.agent, style: const TextStyle(color: Brand.muted, fontSize: 13)),
+              ]),
+              const SizedBox(height: 3),
+              Text(step.summary.isEmpty ? 'Waiting' : step.summary,
+                  style: TextStyle(color: step.state == StepState.idle ? Brand.muted : fg)),
             ]),
           ),
-        ],
+        ),
       ]),
     );
   }
 }
 
-// ------------------------------------------------------------------ Log panel
+// --------------------------------------------------------------- audit log
 
-class _LogPanel extends StatelessWidget {
-  const _LogPanel({required this.log, required this.controller});
+class _AuditLog extends StatelessWidget {
+  const _AuditLog({required this.log});
   final List<LogEntry> log;
-  final ScrollController controller;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Card(
-      margin: EdgeInsets.zero,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-          child: Row(children: [
-            Icon(Icons.receipt_long, color: cs.primary),
-            const SizedBox(width: 8),
-            Text('Audit log', style: Theme.of(context).textTheme.titleMedium),
-            const Spacer(),
-            Text('${log.length} events', style: TextStyle(color: cs.onSurfaceVariant)),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 6),
+          childrenPadding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
+          leading: const Icon(Icons.receipt_long_outlined, color: Brand.purple),
+          iconColor: Brand.purple,
+          collapsedIconColor: Brand.purple,
+          title: Text('Audit log', style: GoogleFonts.bricolageGrotesque(fontSize: 20, fontWeight: FontWeight.w600)),
+          subtitle: Text('${log.length} events · newest first', style: const TextStyle(color: Brand.muted)),
+          children: [
+            if (log.isEmpty) const Align(alignment: Alignment.centerLeft, child: Text('No events yet.')),
+            for (final e in log) _row(e),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _row(LogEntry e) {
+    final dot = switch (e.level) {
+      LogLevel.block => Brand.red,
+      LogLevel.warn => Brand.orange,
+      LogLevel.human => Brand.green,
+      _ => Brand.purple,
+    };
+    final row = Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Container(width: 8, height: 8, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+      ),
+      const SizedBox(width: 12),
+      SizedBox(
+        width: 64,
+        child: Text(e.at.toIso8601String().substring(11, 19),
+            style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Brand.muted)),
+      ),
+      SizedBox(width: 84, child: Text(e.actor, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
+      Expanded(child: Text(e.message, style: const TextStyle(fontSize: 13))),
+    ]);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: e.detail == null || e.detail!.isEmpty
+          ? row
+          : Tooltip(
+              message: e.detail!,
+              waitDuration: const Duration(milliseconds: 300),
+              child: row,
+            ),
+    );
+  }
+}
+
+// --------------------------------------------------------------- API key
+
+class _ApiKeyCard extends StatefulWidget {
+  const _ApiKeyCard({required this.onSaved});
+  final VoidCallback onSaved;
+  @override
+  State<_ApiKeyCard> createState() => _ApiKeyCardState();
+}
+
+class _ApiKeyCardState extends State<_ApiKeyCard> {
+  final _ctrl = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.key_rounded, color: Brand.purple),
+            const SizedBox(width: 10),
+            Text('Connect Gemini', style: GoogleFonts.bricolageGrotesque(fontSize: 22, fontWeight: FontWeight.w600)),
           ]),
-        ),
-        const Divider(height: 1),
-        Expanded(
-          child: ListView.builder(
-            controller: controller,
-            padding: const EdgeInsets.all(12),
-            itemCount: log.length,
-            itemBuilder: (context, i) {
-              final e = log[i];
-              final color = switch (e.level) {
-                LogLevel.block => cs.error,
-                LogLevel.warn => Colors.orange.shade800,
-                LogLevel.human => Colors.green.shade700,
-                LogLevel.agent => cs.primary,
-                LogLevel.info => cs.onSurfaceVariant,
-              };
-              final time = e.at.toIso8601String().substring(11, 19);
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Text.rich(
-                  TextSpan(style: const TextStyle(fontFamily: 'monospace', fontSize: 12), children: [
-                    TextSpan(text: '$time ', style: TextStyle(color: cs.onSurfaceVariant)),
-                    TextSpan(text: '[${e.actor}] ', style: TextStyle(color: color, fontWeight: FontWeight.w700)),
-                    TextSpan(text: e.message),
-                  ]),
-                ),
-              );
-            },
+          const SizedBox(height: 8),
+          const Text(
+              'Paste a Gemini API key from aistudio.google.com/apikey. It stays in this browser and is only sent to Google.',
+              style: TextStyle(color: Brand.muted)),
+          const SizedBox(height: 18),
+          Row(children: [
+            Expanded(
+              child: TextField(
+                controller: _ctrl,
+                obscureText: true,
+                decoration: const InputDecoration(hintText: 'Gemini API key'),
+                onSubmitted: (_) => _save(),
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton(onPressed: _save, child: const Text('Save')),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  void _save() {
+    if (_ctrl.text.trim().isEmpty) return;
+    Settings.apiKey = _ctrl.text;
+    widget.onSaved();
+  }
+}
+
+class _SettingsDialog extends StatefulWidget {
+  const _SettingsDialog();
+  @override
+  State<_SettingsDialog> createState() => _SettingsDialogState();
+}
+
+class _SettingsDialogState extends State<_SettingsDialog> {
+  final _model = TextEditingController(text: Settings.model);
+  bool _auto = Settings.autoApprove;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: Colors.white,
+      title: Text('Settings', style: GoogleFonts.bricolageGrotesque(fontWeight: FontWeight.w600)),
+      content: SizedBox(
+        width: 420,
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Gemini model', style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          TextField(controller: _model),
+          const SizedBox(height: 20),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            activeThumbColor: Brand.orange,
+            title: const Text('Let the Approver agent decide'),
+            subtitle: const Text('Clear cases are approved or rejected automatically. Unclear ones still come to you.'),
+            value: _auto,
+            onChanged: (v) => setState(() => _auto = v),
           ),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: () {
+              Settings.apiKey = '';
+              Navigator.pop(context);
+            },
+            icon: const Icon(Icons.key_off_rounded, color: Brand.purple),
+            label: const Text('Remove API key', style: TextStyle(color: Brand.ink)),
+          ),
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(
+          onPressed: () {
+            Settings.model = _model.text.isEmpty ? 'gemini-2.5-flash' : _model.text;
+            Settings.autoApprove = _auto;
+            Navigator.pop(context);
+          },
+          child: const Text('Save'),
         ),
-      ]),
+      ],
     );
   }
 }

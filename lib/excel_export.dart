@@ -8,7 +8,7 @@ class ExcelExport {
   static String _ts(DateTime d) => d.toIso8601String().substring(0, 19).replaceFirst('T', ' ');
 
   /// Builds the workbook and triggers a browser download. Returns the file name.
-  static String download(List<PipelineResult> approved, List<LogEntry> log) {
+  static String download(List<InvoiceCase> approved, List<LogEntry> log) {
     final excel = Excel.createExcel();
     final defaultSheet = excel.getDefaultSheet()!;
     excel.rename(defaultSheet, 'Buchungen');
@@ -17,7 +17,7 @@ class ExcelExport {
     final header = [
       'Belegdatum', 'Rechnungsnr.', 'Lieferant', 'USt-IdNr.', 'Netto', 'USt-Satz %', 'USt', 'Brutto',
       'Konto (Soll)', 'Kontoname', 'Gegenkonto (Haben)', 'BU-Schlüssel', 'Buchungstext',
-      'Prüfstatus', 'Hinweise', 'Freigegeben am', 'Datei',
+      'Prüfstatus', 'Hinweise', 'Freigegeben am', 'Freigegeben von', 'Datei',
     ];
     s.appendRow(header.map((h) => TextCellValue(h)).toList());
 
@@ -25,7 +25,7 @@ class ExcelExport {
     CellValue? txt(String? v) => v == null ? null : TextCellValue(v);
 
     for (final r in approved) {
-      final i = r.invoice;
+      final i = r.invoice!;
       final b = r.booking;
       s.appendRow([
         txt(i.invoiceDate),
@@ -41,9 +41,10 @@ class ExcelExport {
         txt(b?.contraAccount),
         txt(b?.taxCode),
         txt(b?.bookingText),
-        TextCellValue(r.check.status.name.toUpperCase()),
-        TextCellValue(r.check.issues.map((e) => e.code).join(', ')),
+        TextCellValue(r.check?.status.name.toUpperCase() ?? ''),
+        TextCellValue(r.check?.issues.map((e) => e.code).join(', ') ?? ''),
         txt(r.decidedAt == null ? null : _ts(r.decidedAt!)),
+        TextCellValue(r.decidedBy),
         TextCellValue(r.fileName),
       ]);
     }

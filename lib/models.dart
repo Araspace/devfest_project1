@@ -182,27 +182,41 @@ class BookingSuggestion {
 enum LogLevel { info, agent, warn, block, human }
 
 class LogEntry {
-  LogEntry(this.actor, this.message, {this.level = LogLevel.info, DateTime? at})
+  LogEntry(this.actor, this.message, {this.level = LogLevel.info, this.detail, DateTime? at})
       : at = at ?? DateTime.now();
   final DateTime at;
+  final String? detail;
   final String actor;
   final String message;
   final LogLevel level;
 }
 
-/// Everything known about one uploaded document.
-class PipelineResult {
-  PipelineResult({
-    required this.fileName,
-    required this.invoice,
-    required this.check,
-    this.booking,
-  });
+/// Output of the Approver agent.
+class ApprovalRecommendation {
+  ApprovalRecommendation({required this.decision, required this.reasoning, this.confidence});
+  final String decision; // approve | reject | human_review
+  final String reasoning;
+  final double? confidence;
 
+  factory ApprovalRecommendation.fromJson(Map<String, dynamic> j) {
+    final d = (_toStr(j['decision']) ?? 'human_review').toLowerCase();
+    return ApprovalRecommendation(
+      decision: const ['approve', 'reject', 'human_review'].contains(d) ? d : 'human_review',
+      reasoning: _toStr(j['reasoning']) ?? '',
+      confidence: _toDouble(j['confidence']),
+    );
+  }
+}
+
+/// Everything known about one uploaded document as it moves through the flow.
+class InvoiceCase {
+  InvoiceCase(this.fileName);
   final String fileName;
-  final InvoiceData invoice;
-  final CheckResult check;
-  final BookingSuggestion? booking; // null when blocked
+  InvoiceData? invoice;
+  CheckResult? check;
+  ApprovalRecommendation? recommendation;
+  BookingSuggestion? booking;
   String decision = 'pending'; // pending | approved | rejected
+  String decidedBy = ''; // 'human' | 'approver agent'
   DateTime? decidedAt;
 }
