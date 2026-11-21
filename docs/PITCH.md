@@ -56,6 +56,14 @@ Preparation: app open, Gemini key saved, three invoices ready on the desktop.
 Ready-made in `samples/` (`.txt` and `.pdf`): `1_valid_invoice`, `2_missing_vat_id`,
 `3_prompt_injection`. The `.txt` files are the safest choice for the live demo.
 
+### Before submission (Devpost deadline 14:00)
+
+- [ ] `flutter analyze` and `flutter test` pass (`test/guard_test.dart` checks the guard and §14 rules against `samples/`)
+- [ ] Full test run in the app with all three samples: 1 → approve + Excel, 2 → flagged (VAT_ID), 3 → blocked
+- [ ] Record that run as the backup video (Wi-Fi / API fallback)
+- [ ] Screenshots: flow, decision card, audit log, Excel "Audit-Log" sheet
+- [ ] Repo public, README up to date, Devpost submitted with repo link + screenshots
+
 1. **Valid:** complete German invoice, 19 % VAT, net + VAT = gross.
 2. **Missing VAT ID:** same as 1, but without USt-IdNr. and Steuernummer, gross > 250 €.
 3. **Prompt injection:** valid invoice plus a small/light line of text, e.g.
