@@ -30,9 +30,9 @@ class Brand {
 /// "12.34 €", or "—" when the value is missing.
 String money(double? v) => v == null ? '—' : '${v.toStringAsFixed(2)} €';
 
-/// Heading style for page and card titles.
+/// Heading style for page and card titles (Bricolage Grotesque, the BelegGuard wordmark font).
 TextStyle headline(double size) =>
-    GoogleFonts.ibmPlexSans(fontSize: size, fontWeight: FontWeight.w600, color: Brand.ink, letterSpacing: -0.2);
+    GoogleFonts.bricolageGrotesque(fontSize: size, fontWeight: FontWeight.w600, color: Brand.ink);
 
 /// Monospace for amounts, codes, timestamps and quoted evidence.
 TextStyle mono({double size = 12, Color color = Brand.ink}) => GoogleFonts.ibmPlexMono(fontSize: size, color: color);
@@ -52,7 +52,7 @@ ThemeData buildTheme() {
   return base.copyWith(
     scaffoldBackgroundColor: Brand.paper,
     textTheme: base.textTheme.apply(
-      fontFamily: GoogleFonts.ibmPlexSans().fontFamily,
+      fontFamily: GoogleFonts.inter().fontFamily,
       bodyColor: Brand.ink,
       displayColor: Brand.ink,
     ),

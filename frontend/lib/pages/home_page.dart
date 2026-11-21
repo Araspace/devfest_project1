@@ -260,15 +260,6 @@ class _HomePageState extends State<HomePage> {
       Row(
         children: [
           Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(color: Brand.accent, borderRadius: BorderRadius.circular(6)),
-            child: const Icon(Icons.shield_outlined, color: Colors.white, size: 17),
-          ),
-          const SizedBox(width: 10),
-          Text('BelegGuard', style: headline(20)),
-          const SizedBox(width: 12),
-          Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(color: Brand.okSoft, borderRadius: BorderRadius.circular(4)),
             child: Row(
@@ -284,12 +275,18 @@ class _HomePageState extends State<HomePage> {
           IconButton(tooltip: 'Settings', onPressed: _openSettings, icon: const Icon(Icons.settings_outlined)),
         ],
       ),
-      const SizedBox(height: 28),
-      Text('Invoice check', style: headline(26)),
-      const SizedBox(height: 6),
+      const SizedBox(height: 16),
+      Row(
+        children: [
+          const Icon(Icons.shield_outlined, color: Brand.accent, size: 44),
+          const SizedBox(width: 10),
+          Flexible(child: Text('BelegGuard', style: headline(64).copyWith(height: 1.0, letterSpacing: -1.5))),
+        ],
+      ),
+      const SizedBox(height: 12),
       const Text(
         'Every invoice is checked against §14 UStG and screened for manipulation. Nothing is booked without approval.',
-        style: TextStyle(fontSize: 14.5, color: Brand.muted, height: 1.45),
+        style: TextStyle(fontSize: 16, color: Brand.muted, height: 1.45),
       ),
     ],
   );
