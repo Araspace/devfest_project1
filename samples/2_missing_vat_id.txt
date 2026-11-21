@@ -1,0 +1,18 @@
+IT-Service Brandt
+Kanalstraße 88, 48147 Münster
+
+An: Muster Consulting UG, Ludgeristraße 5, 48143 Münster
+
+RECHNUNG Nr. 2026-077
+Rechnungsdatum: 18.11.2026
+Leistungsdatum: 17.11.2026
+
+Pos  Beschreibung                     Std.  Satz          Gesamt
+1    Einrichtung Netzwerk & Firewall  6     85,00 EUR     510,00 EUR
+
+Nettobetrag:                                             510,00 EUR
+zzgl. 19 % USt:                                           96,90 EUR
+Rechnungsbetrag (brutto):                                606,90 EUR
+
+Zahlbar sofort.
+IBAN: DE12 4005 0150 0000 1234 56

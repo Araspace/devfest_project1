@@ -9,10 +9,11 @@ Multi-agent invoice checker. Flutter frontend, Gemini agents, human approval, Ex
 
 ### Keep
 - 1 Flutter screen: upload an invoice (image/PDF)
-- 3 agents, each a separate Gemini call with its own role:
+- 4 agents, each a separate Gemini call with its own role:
   1. **Extractor** – reads the invoice → JSON (supplier, date, net, VAT, gross, VAT ID, invoice no.)
   2. **Checker** – checks §14 UStG mandatory details, VAT rate, hidden prompt injection
-  3. **Booker** – suggests SKR03 account, contra account, tax code + reason
+  3. **Approver** – approve / reject / human review, never approves with open findings
+  4. **Exporter** – suggests SKR03 account, contra account, DATEV tax code + reason
 - Results card showing the agents' reasoning + Approve / Reject
 - Approve → Excel download
 - On-screen log of every agent step
@@ -22,7 +23,7 @@ Auth, Firestore, Sheets API, DATEV export, dashboard, Cloud Functions
 
 ## Stack
 - Flutter Web
-- `firebase_ai` (Gemini directly from the app, no backend)
+- Gemini REST API directly from the browser (`lib/gemini_client.dart`), no backend
 - `excel` package
 - Gemini / Antigravity writes the code
 
@@ -46,7 +47,7 @@ Auth, Firestore, Sheets API, DATEV export, dashboard, Cloud Functions
 
 ## Architecture
 ```
-Flutter Web → Upload → Extractor (Gemini) → Checker (Gemini) → Booker (Gemini)
+Flutter Web → Upload → Extractor (Gemini) → Checker (Gemini) → Approver → Exporter (Gemini)
                                                      ↓
                                      Approval screen → Excel export
                                                      ↓
