@@ -23,7 +23,7 @@ Approver agent ─── recommends approve / reject / human review
 Exporter agent ─── SKR03 account, contra account, DATEV tax code
    │
    ▼
-Receipt archive ── original copied + filed by month (browser storage), Excel export
+Receipt archive ── original copied + filed by month (IndexedDB), Excel export
    │
    ▼
 Audit log (on screen + "Audit-Log" sheet in the Excel file)
@@ -70,7 +70,7 @@ flutter build web --no-tree-shake-icons
 lib/
   main.dart           Theme (orange / purple, Bricolage Grotesque header)
   home_page.dart      Upload, 4-step flow, decision, invoice data, audit log
-  archive.dart        Receipt archive: filed receipts + original copies (localStorage)
+  archive.dart        Receipt archive: filed receipts + originals (IndexedDB), index (localStorage)
   agents.dart         Extractor, Checker, Approver, Exporter
   gemini_client.dart  Gemini REST client
   guard.dart          Injection guard + §14 UStG rules

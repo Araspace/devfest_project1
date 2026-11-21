@@ -34,7 +34,7 @@ flutter build web --no-tree-shake-icons
 lib/
   main.dart           Theme (orange / purple, Bricolage Grotesque header)
   home_page.dart      Upload, 4-step flow, decision, invoice data, audit log
-  archive.dart        Receipt archive: filed receipts + original copies (localStorage)
+  archive.dart        Receipt archive: filed receipts + originals (IndexedDB), index (localStorage)
   agents.dart         Extractor → Checker → Approver → Exporter
   gemini_client.dart  Gemini REST client
   guard.dart          Deterministic injection guard + §14 UStG rules

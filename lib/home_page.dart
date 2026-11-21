@@ -169,13 +169,13 @@ class _HomePageState extends State<HomePage> {
       _set(3, StepState.running, 'Mapping to SKR03 and writing Excel…');
       final b = await _agents.export(c.invoice!);
       c.booking = b;
-      final copied = Archive.file(c, _archive);
+      final copied = await Archive.file(c, _archive);
       c.bytes = null;
       _set(3, StepState.done, '${b.account} ${b.accountName ?? ''} → filed under ${c.period}');
       _log_('Exporter', 'Booked ${b.account} an ${b.contraAccount} (BU ${b.taxCode ?? '-'}), filed under ${c.period}',
           level: LogLevel.human, detail: b.reasoning);
       if (!copied) {
-        _log_('System', 'Browser storage full – booking filed, but the original file was not copied',
+        _log_('System', 'Could not store the original file (IndexedDB) – booking filed without it',
             level: LogLevel.warn);
       }
     } on GeminiException catch (e) {
@@ -501,14 +501,15 @@ class _HomePageState extends State<HomePage> {
         ),
         Text(_money(i?.gross), style: const TextStyle(fontWeight: FontWeight.w600)),
         IconButton(
-          tooltip: c.hasOriginal ? 'Download original' : 'Original not stored (browser storage full)',
+          tooltip: c.hasOriginal ? 'Download original' : 'Original file not stored',
           onPressed: c.hasOriginal ? () => Archive.downloadOriginal(c) : null,
           icon: const Icon(Icons.file_download_outlined, color: Brand.purple),
         ),
         IconButton(
           tooltip: 'Remove from archive',
-          onPressed: () {
-            setState(() => Archive.remove(c, _archive));
+          onPressed: () async {
+            await Archive.remove(c, _archive);
+            setState(() {});
             _log_('Human', 'Removed ${c.fileName} from the archive', level: LogLevel.human);
           },
           icon: const Icon(Icons.delete_outline, color: Brand.muted),
