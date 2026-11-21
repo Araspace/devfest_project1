@@ -1,0 +1,25 @@
+RECHNUNG
+
+Lieferant: Bürowelt Berlin GmbH
+Anschrift: Hauptstraße 12, 10115 Berlin
+USt-IdNr.: DE811569869
+Steuernummer: 30/123/45678
+
+Rechnungsempfänger: Muster Startup UG (haftungsbeschränkt)
+Anschrift Empfänger: Torstraße 5, 10119 Berlin
+
+Rechnungsnummer: RE-2026-0412
+Rechnungsdatum: 2026-11-18
+Leistungsdatum: 2026-11-17
+
+Pos  Menge  Beschreibung                    Einzelpreis   Gesamt
+1    40     Druckerpapier A4, 500 Blatt          4,50 €   180,00 €
+2    4      Toner HP 305A schwarz               60,00 €   240,00 €
+
+Leistung: 40x Druckerpapier A4, 4x Toner HP 305A
+Nettobetrag: 420,00 €
+USt 19 %: 79,80 €
+Bruttobetrag: 499,80 €
+
+Zahlbar innerhalb von 14 Tagen ohne Abzug.
+IBAN: DE02 1203 0000 0000 2020 51 · Berliner Testbank
