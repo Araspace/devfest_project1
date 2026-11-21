@@ -72,7 +72,8 @@ class GeminiClient {
     if (res.statusCode != 200) {
       final err = decoded is Map ? decoded['error'] : null;
       final msg = err is Map ? err['message'] : null;
-      throw GeminiException('Gemini API error ${res.statusCode}: ${msg ?? res.body}');
+      final hint = res.statusCode == 404 ? ' → Open Settings (top right) and enter a current model name.' : '';
+      throw GeminiException('Gemini API error ${res.statusCode}: ${msg ?? res.body}$hint');
     }
 
     final candidates = (decoded['candidates'] as List?) ?? const [];

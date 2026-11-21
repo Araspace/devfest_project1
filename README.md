@@ -27,7 +27,7 @@ Audit log (on screen + "Audit-Log" sheet in the Excel file)
 ```
 
 Each agent is a separate call to the Gemini API (`generativelanguage.googleapis.com`) with its
-own fixed system instruction and JSON output. Default model: `gemini-2.5-flash`.
+own fixed system instruction and JSON output. Default model: `gemini-3.8-flash` (change it under Settings if Google retires it).
 
 ## Security
 

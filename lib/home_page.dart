@@ -657,7 +657,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(
           onPressed: () {
-            Settings.model = _model.text.isEmpty ? 'gemini-2.5-flash' : _model.text;
+            Settings.model = _model.text.trim().isEmpty ? 'gemini-3.8-flash' : _model.text;
             Settings.autoApprove = _auto;
             Navigator.pop(context);
           },

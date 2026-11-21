@@ -5,7 +5,8 @@ import 'package:web/web.dart' as web;
 
 class Settings {
   static const _envKey = String.fromEnvironment('GEMINI_API_KEY');
-  static const _envModel = String.fromEnvironment('GEMINI_MODEL', defaultValue: 'gemini-2.5-flash');
+  static const _envModel = String.fromEnvironment('GEMINI_MODEL', defaultValue: 'gemini-3.8-flash');
+  static const _retired = {'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'};
 
   static String? _read(String k) {
     try {
@@ -28,7 +29,11 @@ class Settings {
   static String get apiKey => _read('bg_api_key') ?? _envKey;
   static set apiKey(String v) => _write('bg_api_key', v.trim());
 
-  static String get model => _read('bg_model') ?? _envModel;
+  static String get model {
+    final saved = _read('bg_model');
+    // Ignore model names Google has retired for new API keys.
+    return saved == null || saved.isEmpty || _retired.contains(saved) ? _envModel : saved;
+  }
   static set model(String v) => _write('bg_model', v.trim());
 
   static bool get autoApprove => _read('bg_auto_approve') == '1';
