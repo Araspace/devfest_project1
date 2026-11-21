@@ -32,7 +32,9 @@ class InjectionGuard {
       }
     }
     // Zero-width / bidi control characters are a classic hiding trick.
-    if (text.runes.any((r) => (r >= 0x200B && r <= 0x200F) || (r >= 0x202A && r <= 0x202E) || (r >= 0x2060 && r <= 0x2064) || r == 0xFEFF)) {
+    // A leading BOM (Windows text files) and LRM/RLM marks (common in PDF text) are harmless.
+    final body = text.startsWith('﻿') ? text.substring(1) : text;
+    if (body.runes.any((r) => (r >= 0x200B && r <= 0x200D) || (r >= 0x202A && r <= 0x202E) || (r >= 0x2060 && r <= 0x2064) || r == 0xFEFF)) {
       hits.add('Invisible Unicode control characters found in invoice text');
     }
     return hits.toSet().toList();

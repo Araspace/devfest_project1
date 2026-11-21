@@ -50,9 +50,9 @@ class ExcelExport {
     }
 
     final a = excel['Audit-Log'];
-    a.appendRow([TextCellValue('Zeit'), TextCellValue('Akteur'), TextCellValue('Ereignis')]);
+    a.appendRow([TextCellValue('Zeit'), TextCellValue('Akteur'), TextCellValue('Ereignis'), TextCellValue('Begründung')]);
     for (final e in log) {
-      a.appendRow([TextCellValue(_ts(e.at)), TextCellValue(e.actor), TextCellValue(e.message)]);
+      a.appendRow([TextCellValue(_ts(e.at)), TextCellValue(e.actor), TextCellValue(e.message), TextCellValue(e.detail ?? '')]);
     }
 
     final name = 'BelegGuard_${DateTime.now().toIso8601String().substring(0, 10)}.xlsx';

@@ -270,7 +270,7 @@ class _HomePageState extends State<HomePage> {
           Text('Drop in an invoice',
               style: GoogleFonts.bricolageGrotesque(fontSize: 26, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
-          const Text('PDF, JPG, PNG or WEBP', style: TextStyle(color: Brand.muted)),
+          const Text('PDF, JPG, PNG, WEBP or TXT', style: TextStyle(color: Brand.muted)),
           const SizedBox(height: 22),
           FilledButton.icon(
             onPressed: _busy ? null : _pick,

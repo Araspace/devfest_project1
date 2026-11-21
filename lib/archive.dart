@@ -116,7 +116,8 @@ class Archive {
       ..href = url
       ..download = c.fileName
       ..click();
-    web.URL.revokeObjectURL(url);
+    // Revoking right away can cancel the download in some browsers.
+    Future.delayed(const Duration(seconds: 10), () => web.URL.revokeObjectURL(url));
     return true;
   }
 }

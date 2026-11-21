@@ -119,6 +119,16 @@ flutter run -d chrome --dart-define=GEMINI_API_KEY=your-key
 
 Settings (top right): Gemini model, and "Let the Approver agent decide".
 
+Checks before every push (analyze + 22 unit tests + API-key scan):
+
+```bash
+./tool/check.sh                        # run manually
+git config core.hooksPath .githooks    # once per clone: run it automatically on git push
+```
+
+The tests (`test/`) cover the guard, the §14 UStG rules and the agents' hard limits with a fake Gemini
+client – no network, no key needed.
+
 Build for hosting:
 
 ```bash
