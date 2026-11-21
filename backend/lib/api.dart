@@ -70,10 +70,12 @@ class Api {
       if (req.method == 'POST' && seg.length == 4 && seg[0] == 'api' && seg[1] == 'cases') {
         final c = _cases[seg[2]];
         if (c == null) return _error(404, 'Unknown case');
+        // One agent step at a time, so tool calls and output-guard hits are always
+        // logged under the case that caused them.
         return switch (seg[3]) {
-          'check' => await _check(seg[2], c),
-          'recommend' => await _recommend(seg[2], c),
-          'export' => await _export(seg[2], c, req),
+          'check' => await _serial(seg[2], () => _check(seg[2], c)),
+          'recommend' => await _serial(seg[2], () => _recommend(seg[2], c)),
+          'export' => await _serial(seg[2], () => _export(seg[2], c, req)),
           'reject' => await _reject(seg[2], req),
           _ => _error(404, 'Not found'),
         };
@@ -87,6 +89,49 @@ class Api {
       // Never a stack trace for the client (or on stage).
       stderr.writeln('Unhandled error on ${req.method} /${req.url.path}: $e');
       return _error(500, 'Internal error – see the server log');
+    }
+  }
+
+  Future<void> _lock = Future.value();
+
+  /// Runs [step] after all earlier agent steps finished, then writes what the tools
+  /// and the output guard recorded during it to the audit log – also when it failed.
+  Future<Response> _serial(String id, Future<Response> Function() step) {
+    final result = _lock.then((_) async {
+      try {
+        return await step();
+      } finally {
+        _auditSideEffects(id);
+      }
+    });
+    _lock = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
+  void _auditSideEffects(String id) {
+    for (final t in agents.tools.drainCalls()) {
+      _audit(
+        id,
+        'checker',
+        t.allowed ? 'allowed' : 'blocked',
+        'tool ${t.name} (${t.caller})',
+        'result: ${jsonEncode(t.result)}',
+        rule: t.allowed ? 'READ_ONLY_TOOL' : 'TOOL_ALLOWLIST',
+        tool: t.name,
+        args: t.args,
+      );
+    }
+    for (final h in agents.drainOutputHits()) {
+      _audit(
+        id,
+        h.agent,
+        'blocked',
+        'output redacted',
+        'Agent output contained a ${h.kind}; it was redacted before use',
+        rule: 'OUTPUT_FILTER',
+        tool: 'output_guard',
+        args: {'kind': h.kind},
+      );
     }
   }
 
@@ -127,18 +172,6 @@ class Api {
     if (inv == null) return _error(409, 'Extract first');
     c.recommendation = null; // a new check invalidates an earlier recommendation
     c.check = await agents.check(inv);
-    for (final t in agents.tools.drainCalls()) {
-      _audit(
-        id,
-        'checker',
-        t.allowed ? 'allowed' : 'blocked',
-        'tool ${t.name} (${t.caller})',
-        'result: ${jsonEncode(t.result)}',
-        rule: t.allowed ? 'READ_ONLY_TOOL' : 'TOOL_ALLOWLIST',
-        tool: t.name,
-        args: t.args,
-      );
-    }
     final blocked = c.check!.status == CheckStatus.blocked;
     _audit(
       id,

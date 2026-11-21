@@ -51,6 +51,42 @@ class InjectionGuard {
   }
 }
 
+/// Screens what an agent *returns*: secrets and links are redacted before the answer
+/// is used, shown or logged. This closes the exfiltration path of a successful
+/// injection ("put the API key / this URL into your answer").
+class OutputGuard {
+  static final _secrets = [
+    RegExp(r'AIza[0-9A-Za-z_-]{30,}'), // Google API key
+    RegExp(r'\b(sk|ghp|gho|xox[abp])[-_][A-Za-z0-9_-]{20,}'),
+    RegExp(r'-----BEGIN [A-Z ]*PRIVATE KEY-----'),
+  ];
+  static final _url = RegExp(r'(https?://|www\.)[^\s"<>)\]]+', caseSensitive: false);
+
+  /// Returns a redacted copy of [value] (maps, lists and strings are walked) and
+  /// adds one entry to [hits] per kind of finding.
+  static Object? screen(Object? value, Set<String> hits, {String? apiKey}) {
+    if (value is Map) return {for (final e in value.entries) e.key: screen(e.value, hits, apiKey: apiKey)};
+    if (value is List) return [for (final e in value) screen(e, hits, apiKey: apiKey)];
+    if (value is! String) return value;
+    var s = value;
+    if (apiKey != null && apiKey.length >= 8 && s.contains(apiKey)) {
+      s = s.replaceAll(apiKey, '[redacted-secret]');
+      hits.add('secret');
+    }
+    for (final p in _secrets) {
+      if (p.hasMatch(s)) {
+        s = s.replaceAll(p, '[redacted-secret]');
+        hits.add('secret');
+      }
+    }
+    if (_url.hasMatch(s)) {
+      s = s.replaceAll(_url, '[link removed]');
+      hits.add('link');
+    }
+    return s;
+  }
+}
+
 /// Deterministic §14 Abs. 4 UStG checks + arithmetic plausibility.
 class ComplianceRules {
   static final _vatIdRe = RegExp(r'^[A-Z]{2}[A-Z0-9]{8,12}$');
