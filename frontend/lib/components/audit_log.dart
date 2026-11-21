@@ -2,7 +2,6 @@
 
 import 'package:belegguard_shared/models.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme.dart';
 
@@ -19,10 +18,10 @@ class AuditLog extends StatelessWidget {
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 6),
           childrenPadding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
-          leading: const Icon(Icons.receipt_long_outlined, color: Brand.purple),
-          iconColor: Brand.purple,
-          collapsedIconColor: Brand.purple,
-          title: Text('Audit log', style: headline(20)),
+          leading: const Icon(Icons.receipt_long_outlined),
+          iconColor: Brand.accent,
+          collapsedIconColor: Brand.accent,
+          title: Text('Audit log', style: headline(16)),
           subtitle: Text('${log.length} events · newest first', style: const TextStyle(color: Brand.muted)),
           children: [
             if (log.isEmpty) const Align(alignment: Alignment.centerLeft, child: Text('No events yet.')),
@@ -35,10 +34,10 @@ class AuditLog extends StatelessWidget {
 
   Widget _row(LogEntry e) {
     final dot = switch (e.level) {
-      LogLevel.block => Brand.red,
-      LogLevel.warn => Brand.orange,
-      LogLevel.human => Brand.green,
-      _ => Brand.purple,
+      LogLevel.block => Brand.danger,
+      LogLevel.warn => Brand.accent,
+      LogLevel.human => Brand.ok,
+      _ => Brand.accent,
     };
     final row = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -54,10 +53,7 @@ class AuditLog extends StatelessWidget {
         const SizedBox(width: 12),
         SizedBox(
           width: 64,
-          child: Text(
-            e.at.toIso8601String().substring(11, 19),
-            style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Brand.muted),
-          ),
+          child: Text(e.at.toIso8601String().substring(11, 19), style: mono(color: Brand.muted)),
         ),
         SizedBox(
           width: 84,

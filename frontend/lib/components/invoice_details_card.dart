@@ -2,7 +2,6 @@
 
 import 'package:belegguard_shared/models.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme.dart';
 import 'key_value.dart';
@@ -18,11 +17,11 @@ class InvoiceDetailsCard extends StatelessWidget {
     final b = invoiceCase.booking;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(28),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Invoice data', style: headline(22)),
+            Text('Invoice data', style: headline(17)),
             const SizedBox(height: 18),
             Wrap(
               runSpacing: 16,
@@ -80,11 +79,17 @@ class InvoiceDetailsCard extends StatelessWidget {
             Severity.error => Icons.error_outline,
             _ => Icons.info_outline,
           },
-          size: 20,
-          color: Brand.purple,
+          size: 18,
+          color: switch (i.severity) {
+            Severity.critical || Severity.error => Brand.danger,
+            Severity.warning => Brand.warn,
+            _ => Brand.muted,
+          },
         ),
         const SizedBox(width: 10),
-        Expanded(child: Text(i.message)),
+        Expanded(child: Text(i.message, style: const TextStyle(fontSize: 14, height: 1.4))),
+        const SizedBox(width: 12),
+        Text(i.code, style: mono(size: 11, color: Brand.muted)),
       ],
     ),
   );
@@ -92,7 +97,7 @@ class InvoiceDetailsCard extends StatelessWidget {
   Widget _evidence(List<String> evidence) => Container(
     width: double.infinity,
     padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(color: Brand.cream, borderRadius: BorderRadius.circular(12)),
+    decoration: BoxDecoration(color: Brand.paper, borderRadius: BorderRadius.circular(12)),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -101,8 +106,7 @@ class InvoiceDetailsCard extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.w600, color: Brand.muted),
         ),
         const SizedBox(height: 6),
-        for (final e in evidence.take(3))
-          Text('“$e”', style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Brand.ink)),
+        for (final e in evidence.take(3)) Text('“$e”', style: mono(color: Brand.ink)),
       ],
     ),
   );

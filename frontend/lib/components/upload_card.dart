@@ -34,19 +34,25 @@ class UploadCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
-        child: Column(
+        padding: const EdgeInsets.all(24),
+        child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: const BoxDecoration(color: Brand.purpleSoft, shape: BoxShape.circle),
-              child: const Icon(Icons.upload_file_rounded, size: 36, color: Brand.purple),
+            const Icon(Icons.upload_file_outlined, size: 28, color: Brand.muted),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Upload an invoice', style: headline(16)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'PDF, JPG, PNG, WEBP or TXT · max. 10 MB · treated as untrusted data',
+                    style: TextStyle(color: Brand.muted, fontSize: 13),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 18),
-            Text('Drop in an invoice', style: headline(26)),
-            const SizedBox(height: 6),
-            const Text('PDF, JPG, PNG, WEBP or TXT', style: TextStyle(color: Brand.muted)),
-            const SizedBox(height: 22),
+            const SizedBox(width: 16),
             FilledButton.icon(
               onPressed: busy ? null : _pick,
               icon: busy
@@ -56,7 +62,7 @@ class UploadCard extends StatelessWidget {
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
                   : const Icon(Icons.add_rounded),
-              label: Text(busy ? 'Agents at work…' : 'Choose invoice'),
+              label: Text(busy ? 'Checking…' : 'Choose file'),
             ),
           ],
         ),

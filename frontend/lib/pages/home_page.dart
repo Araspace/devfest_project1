@@ -233,7 +233,7 @@ class _HomePageState extends State<HomePage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _header(),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 28),
                   UploadCard(busy: _busy, onFile: _run),
                   if (c != null) ...[const SizedBox(height: 28), _flowCard(c)],
                   if (c?.invoice != null) ...[const SizedBox(height: 28), InvoiceDetailsCard(invoiceCase: c!)],
@@ -254,37 +254,42 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _header() => Row(
+  Widget _header() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(color: Brand.accent, borderRadius: BorderRadius.circular(6)),
+            child: const Icon(Icons.shield_outlined, color: Colors.white, size: 17),
+          ),
+          const SizedBox(width: 10),
+          Text('BelegGuard', style: headline(20)),
+          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(color: Brand.okSoft, borderRadius: BorderRadius.circular(4)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.shield_outlined, color: Brand.purple, size: 44),
-                const SizedBox(width: 10),
-                Flexible(
-                  child: Text(
-                    'BelegGuard',
-                    style: headline(64).copyWith(color: Brand.ink, height: 1.0, letterSpacing: -1.5),
-                  ),
-                ),
+                const Icon(Icons.lock_outline, size: 12, color: Brand.ok),
+                const SizedBox(width: 4),
+                Text('Guard active', style: mono(size: 11, color: Brand.ok)),
               ],
             ),
-            const SizedBox(height: 12),
-            const Text(
-              'AI agents check your invoices for legal compliance – and resist manipulation.',
-              style: TextStyle(fontSize: 17, color: Brand.muted),
-            ),
-          ],
-        ),
+          ),
+          const Spacer(),
+          IconButton(tooltip: 'Settings', onPressed: _openSettings, icon: const Icon(Icons.settings_outlined)),
+        ],
       ),
-      IconButton(
-        tooltip: 'Settings',
-        onPressed: _openSettings,
-        icon: const Icon(Icons.tune, color: Brand.purple),
+      const SizedBox(height: 28),
+      Text('Invoice check', style: headline(26)),
+      const SizedBox(height: 6),
+      const Text(
+        'Every invoice is checked against §14 UStG and screened for manipulation. Nothing is booked without approval.',
+        style: TextStyle(fontSize: 14.5, color: Brand.muted, height: 1.45),
       ),
     ],
   );
@@ -293,19 +298,19 @@ class _HomePageState extends State<HomePage> {
     final waiting = _steps[2].state == FlowState.waiting;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(28),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(c.fileName, style: headline(22)),
+            Text(c.fileName, style: headline(17)),
             const SizedBox(height: 22),
             for (var i = 0; i < _steps.length; i++) StepRow(step: _steps[i], last: i == _steps.length - 1),
             if (_error != null)
               Container(
                 margin: const EdgeInsets.only(top: 8),
                 padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(12)),
-                child: Text(_error!, style: const TextStyle(color: Brand.red)),
+                decoration: BoxDecoration(color: Brand.dangerSoft, borderRadius: BorderRadius.circular(6)),
+                child: Text(_error!, style: const TextStyle(color: Brand.danger)),
               ),
             if (waiting) ...[
               const SizedBox(height: 8),
@@ -322,7 +327,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                   OutlinedButton.icon(
                     onPressed: () => _decide(c, approved: false, by: 'human'),
-                    icon: const Icon(Icons.close_rounded, color: Brand.purple),
+                    icon: const Icon(Icons.close_rounded, color: Brand.danger),
                     label: const Text('Reject'),
                   ),
                 ],
