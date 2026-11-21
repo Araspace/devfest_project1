@@ -15,7 +15,7 @@ Pitch: "Qonto stores receipts. Our agents check them for legal compliance and re
 
 - Flutter Web (Dart SDK ^3.13), Material, `google_fonts`
 - Google Gemini REST API directly from the browser (`lib/gemini_client.dart`), no backend
-- Default model `gemini-3.8-flash` (changeable in Settings)
+- Default model `gemini-3.6-flash` (changeable in Settings); falls back to other Flash models on 503 / timeout
 - `excel`, `file_picker`, `http`, `web`
 
 ## Commands

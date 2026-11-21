@@ -5,8 +5,9 @@ import 'package:web/web.dart' as web;
 
 class Settings {
   static const _envKey = String.fromEnvironment('GEMINI_API_KEY');
-  static const _envModel = String.fromEnvironment('GEMINI_MODEL', defaultValue: 'gemini-3.8-flash');
-  static const _retired = {'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'};
+  static const _envModel = String.fromEnvironment('GEMINI_MODEL', defaultValue: 'gemini-3.6-flash');
+  // Retired models, plus former defaults that are constantly overloaded (saved by older builds).
+  static const _retired = {'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-3.8-flash', 'gemini-3.7-flash'};
 
   static String? _read(String k) {
     try {
