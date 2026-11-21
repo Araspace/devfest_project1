@@ -91,10 +91,17 @@ class _HomePageState extends State<HomePage> {
     try {
       // 1 · Extract
       _set(i, StepState.running, 'Reading the document…');
+      final sw = Stopwatch()..start();
+      String took() {
+        final t = '${(sw.elapsedMilliseconds / 1000).toStringAsFixed(1)} s';
+        sw.reset();
+        return t;
+      }
+
       final inv = await _agents.extract(doc);
       c.invoice = inv;
       _set(i, StepState.done, '${inv.supplierName ?? 'Unknown supplier'} · ${_money(inv.gross)}');
-      _log_('Extractor', 'Extracted ${inv.supplierName ?? '?'}, invoice ${inv.invoiceNumber ?? '?'}, ${_money(inv.gross)}',
+      _log_('Extractor', 'Extracted ${inv.supplierName ?? '?'}, invoice ${inv.invoiceNumber ?? '?'}, ${_money(inv.gross)} (${took()})',
           detail: inv.reasoning);
 
       // 2 · Check
@@ -102,6 +109,7 @@ class _HomePageState extends State<HomePage> {
       _set(i, StepState.running, 'Checking §14 UStG, VAT and hidden instructions…');
       final chk = await _agents.check(inv);
       c.check = chk;
+      _log_('Checker', 'Answered in ${took()}');
       final n = chk.issues.length;
       switch (chk.status) {
         case CheckStatus.ok:
@@ -122,7 +130,7 @@ class _HomePageState extends State<HomePage> {
       _set(i, StepState.running, 'Approver agent is reviewing…');
       final rec = await _agents.recommend(inv, chk);
       c.recommendation = rec;
-      _log_('Approver', 'Recommends: ${rec.decision.replaceAll('_', ' ')}', detail: rec.reasoning);
+      _log_('Approver', 'Recommends: ${rec.decision.replaceAll('_', ' ')} (${took()})', detail: rec.reasoning);
 
       if (chk.status == CheckStatus.blocked) {
         await _decide(c, approved: false, by: 'guard');
@@ -763,7 +771,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(
           onPressed: () {
-            Settings.model = _model.text.trim().isEmpty ? 'gemini-3.8-flash' : _model.text;
+            Settings.model = _model.text.trim().isEmpty ? 'gemini-3.6-flash' : _model.text;
             Settings.autoApprove = _auto;
             Navigator.pop(context);
           },

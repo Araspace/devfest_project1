@@ -40,7 +40,12 @@ class GeminiClient {
   final String apiKey;
   final String model;
 
-  bool get _isGemini3 => model.startsWith('gemini-3');
+  /// Tried in order when the chosen model is overloaded or hangs. Gemini capacity
+  /// varies a lot per model; during the DevFest 3.7/3.8-flash were often unavailable.
+  static const fallbackModels = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
+
+  /// Model that answered the last request (may differ from [model] after a fallback).
+  String? lastModel;
 
   /// Sends one request with a fixed system instruction and returns the parsed
   /// JSON object the model produced.
@@ -48,47 +53,75 @@ class GeminiClient {
     required String system,
     required List<GeminiPart> parts,
   }) async {
-    final uri = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent');
-    final body = {
-      'system_instruction': {
-        'parts': [
-          {'text': system},
-        ],
-      },
-      'contents': [
-        {'role': 'user', 'parts': parts.map((p) => p.toJson()).toList()},
-      ],
-      'generationConfig': {
-        'responseMimeType': 'application/json',
-        // Gemini 3 models must run at the default temperature (1.0): lower values make them
-        // loop until the request times out. Older models stay deterministic.
-        if (!_isGemini3) 'temperature': 0,
-        // Default thinking level is "high", which is far too slow for a live demo.
-        if (_isGemini3) 'thinkingConfig': {'thinkingLevel': 'low'},
-      },
-    };
-
-    // Retry transient errors (rate limit / overload) – common during live demos.
-    http.Response? res;
-    for (var attempt = 0; attempt < 3; attempt++) {
-      try {
-        res = await http
-            .post(uri,
-                headers: {'Content-Type': 'application/json', 'x-goog-api-key': apiKey}, body: jsonEncode(body))
-            .timeout(const Duration(seconds: 120));
-      } on TimeoutException {
-        // Retrying a request that already took two minutes only multiplies the wait.
-        throw GeminiException('Gemini did not answer within 120 s. Try again or pick a faster model in Settings.');
-      } catch (e) {
-        if (attempt == 2) throw GeminiException('Could not reach the Gemini API: $e');
-        await Future.delayed(Duration(seconds: 2 << attempt));
-        continue;
-      }
-      if (!const {429, 500, 503}.contains(res.statusCode) || attempt == 2) break;
-      await Future.delayed(Duration(seconds: 2 << attempt));
+    final contents = [
+      {'role': 'user', 'parts': parts.map((p) => p.toJson()).toList()},
+    ];
+    Map<String, dynamic> body(String m, String thinkingLevel) {
+      final isGemini3 = m.startsWith('gemini-3');
+      return {
+        'system_instruction': {
+          'parts': [
+            {'text': system},
+          ],
+        },
+        'contents': contents,
+        'generationConfig': {
+          'responseMimeType': 'application/json',
+          // Gemini 3 models must run at the default temperature (1.0): lower values make them
+          // loop until the request times out. Older models stay deterministic.
+          if (!isGemini3) 'temperature': 0,
+          // Every agent is a pure extract/classify task with fixed rules. Thinking adds
+          // tens of seconds per call (default level is "high") without better results.
+          if (isGemini3) 'thinkingConfig': {'thinkingLevel': thinkingLevel},
+        },
+      };
     }
 
-    final r = res!;
+    // Overloaded models either answer 503 or simply hang. Instead of waiting, move on
+    // to the next model quickly.
+    final models = [model, ...fallbackModels.where((m) => m != model)];
+    http.Response? res;
+    final problems = <String>[];
+    for (final m in models) {
+      final uri = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$m:generateContent');
+      var thinkingLevel = 'minimal';
+      for (var attempt = 0; attempt < 2; attempt++) {
+        try {
+          res = await http
+              .post(uri,
+                  headers: {'Content-Type': 'application/json', 'x-goog-api-key': apiKey},
+                  body: jsonEncode(body(m, thinkingLevel)))
+              .timeout(const Duration(seconds: 40));
+        } on TimeoutException {
+          res = null;
+          problems.add('$m: no answer within 40 s');
+          break;
+        } catch (e) {
+          res = null;
+          problems.add('$m: $e');
+          break;
+        }
+        // Not every model supports "minimal" thinking – retry the same model with "low".
+        if (res.statusCode == 400 && thinkingLevel == 'minimal' && res.body.toLowerCase().contains('thinking')) {
+          thinkingLevel = 'low';
+          continue;
+        }
+        break;
+      }
+      final code = res?.statusCode;
+      if (code != null && !const {404, 429, 500, 503}.contains(code)) {
+        lastModel = m;
+        break;
+      }
+      if (code != null) problems.add('$m: HTTP $code');
+      res = null;
+    }
+    final r = res;
+    if (r == null) {
+      throw GeminiException(
+          'All Gemini models are busy or unreachable right now – try again in a minute.\n${problems.join('\n')}');
+    }
+
     Object? decoded;
     try {
       decoded = jsonDecode(utf8.decode(r.bodyBytes));
