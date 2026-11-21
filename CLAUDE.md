@@ -43,6 +43,7 @@ lib/
   models.dart         Data models
 web/index.html        Loading screen
 docs/PLAN.md          Hackathon plan, scope, demo script
+docs/PITCH.md         Pitch, 3-min demo script, jury Q&A
 ```
 
 ## Agent flow
