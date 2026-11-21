@@ -129,6 +129,23 @@ void main() {
       expect(r.issues.map((i) => i.code), contains('UNUSABLE'));
     });
 
+    test('secrets and links in an agent answer are redacted and reported', () async {
+      final agents = Agents(
+        // Fake key built at runtime, so the repo's key scan does not trip over this file.
+        FakeGemini({...okCheck, 'reasoning': 'Key AIza${'x' * 35}, see https://evil.example/x?d=1'}),
+      );
+      final r = await agents.check(invoice());
+      expect(r.reasoning, isNot(contains('AIza')));
+      expect(r.reasoning, isNot(contains('evil.example')));
+      expect(agents.drainOutputHits().map((h) => h.kind), containsAll(['secret', 'link']));
+    });
+
+    test('"blocked" from the LLM next to a rule finding adds no UNUSABLE', () async {
+      final r = await check(invoice(vatId: null), {...okCheck, 'status': 'blocked'});
+      expect(r.issues.map((i) => i.code), isNot(contains('UNUSABLE')));
+      expect(r.status, CheckStatus.warning);
+    });
+
     test('a warning-level finding is not ok', () async {
       final r = await check(invoice(vatId: 'DE12')); // invalid format → warning
       expect(r.status, CheckStatus.warning);

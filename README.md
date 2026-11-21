@@ -70,6 +70,7 @@ own fixed system instruction and JSON output. Default model: `gemini-3.6-flash` 
 | `IBAN_MISMATCH` | `tools.dart` + Checker | IBAN on the invoice differs from supplier master data → finding (possible payment fraud) |
 | `DUPLICATE_INVOICE` | `tools.dart` + Checker | Same supplier + invoice number already booked → finding (double payment) |
 | `TOOL_ALLOWLIST` / `READ_ONLY_TOOL` | `tools.dart`, `api.dart` | Only the two read-only tools run, args validated; every tool call in `audit_log.jsonl` |
+| `OUTPUT_FILTER` | `guard.dart` (`OutputGuard`), `agents.dart` | API keys / tokens and links in any agent answer are redacted before use and logged (exfiltration path of a successful injection) |
 | Upload limits | `api.dart` | PDF / PNG / JPEG / WebP / text only, max 10 MB |
 | Origin check / CORS | `api.dart` | Only localhost or `ALLOWED_ORIGINS`; requests from any other browser origin get HTTP 403 |
 | Case ids | `api.dart` | Random 128-bit ids from server state, never from LLM output or the client |
@@ -96,6 +97,7 @@ cd backend && SHIELD=off dart run bin/server.dart   # demo only
 | Manipulated amounts or IBAN | Deterministic sum / VAT-rate checks; nothing is booked or paid, only suggested after human approval |
 | Non-compliant invoice slipping through | §14 UStG rules run in code, independent of the LLM, and can only make the verdict stricter |
 | Agent goes rogue | Fixed chain, no write tools, Approver can't approve with open findings, every step in the audit log |
+| Exfiltration through the agent's answer ("put the key / this link into your reasoning") | Output guard redacts secrets and links in Checker, Approver and Exporter answers and writes `OUTPUT_FILTER` to the audit log |
 | Stolen API key | See below |
 
 ### API key protection
