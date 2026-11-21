@@ -51,8 +51,12 @@ String _topic(String code) {
 }
 
 class Agents {
-  Agents(this.gemini);
+  Agents(this.gemini, {this.shield = true});
   final GeminiClient gemini;
+
+  /// SHIELD=off disables the injection guard (demo only: shows the attack succeeding).
+  /// The §14 UStG rules and the approval rules stay active either way.
+  final bool shield;
 
   // ---------------------------------------------------------------- Extractor
   static const extractorSystem =
@@ -122,11 +126,12 @@ Return exactly:
     // *considers* suspicious is re-checked by the guard: a hit blocks, otherwise it
     // becomes a finding for human review (never auto-approved). This keeps harmless
     // lines like "Zahlbar sofort" from blocking a clean invoice.
-    final guardHits = [
-      ...InjectionGuard.scan(inv.rawText),
-      for (final s in inv.suspiciousText) ...InjectionGuard.scan(s),
-    ];
-    final flaggedOnly = inv.suspiciousText.where((s) => InjectionGuard.scan(s).isEmpty).toList();
+    final guardHits = shield
+        ? [...InjectionGuard.scan(inv.rawText), for (final s in inv.suspiciousText) ...InjectionGuard.scan(s)]
+        : const <String>[];
+    final flaggedOnly = shield
+        ? inv.suspiciousText.where((s) => InjectionGuard.scan(s).isEmpty).toList()
+        : const <String>[];
 
     final json = await gemini.generateJson(
       system: checkerSystem,
@@ -141,7 +146,7 @@ Return exactly:
         .map((m) => Issue.fromJson(m.cast<String, dynamic>()))
         .toList();
     final llmEvidence = (json['injection_evidence'] as List? ?? const []).map((e) => e.toString()).toList();
-    final injection = json['injection_detected'] == true || guardHits.isNotEmpty;
+    final injection = shield && (json['injection_detected'] == true || guardHits.isNotEmpty);
 
     // Strictest wins: the rules and the guard can only add problems.
     final issues = <Issue>[

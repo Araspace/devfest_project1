@@ -11,6 +11,7 @@ import '../components/audit_log.dart';
 import '../components/invoice_details_card.dart';
 import '../components/recommendation_box.dart';
 import '../components/settings_dialog.dart';
+import '../components/shield_badge.dart';
 import '../components/step_row.dart';
 import '../components/upload_card.dart';
 import '../services/api_client.dart';
@@ -46,16 +47,23 @@ class _HomePageState extends State<HomePage> {
     _checkBackend();
   }
 
+  bool? _shield; // null until the backend answered
+
   Future<void> _checkBackend() async {
-    final model = await _api.health();
+    final h = await _api.health();
     if (!mounted) return;
-    model == null
+    setState(() => _shield = h?.shield);
+    h == null
         ? _addLog(
             'System',
             'Backend not reachable at ${Settings.backendUrl} – start it with: cd backend && dart run bin/server.dart',
             level: LogLevel.block,
           )
-        : _addLog('System', 'Connected to backend (model $model)');
+        : _addLog(
+            'System',
+            'Connected to backend (model ${h.model}, shield ${h.shield ? 'on' : 'off'})',
+            level: h.shield ? LogLevel.info : LogLevel.warn,
+          );
   }
 
   void _addLog(String actor, String msg, {LogLevel level = LogLevel.info, String? detail}) =>
@@ -281,6 +289,7 @@ class _HomePageState extends State<HomePage> {
           const Icon(Icons.shield_outlined, color: Brand.accent, size: 44),
           const SizedBox(width: 10),
           Flexible(child: Text('BelegGuard', style: headline(64).copyWith(height: 1.0, letterSpacing: -1.5))),
+          if (_shield != null) ...[const SizedBox(width: 16), ShieldBadge(on: _shield!)],
         ],
       ),
       const SizedBox(height: 12),

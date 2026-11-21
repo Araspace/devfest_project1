@@ -24,16 +24,23 @@ Future<void> main() async {
   }
   final model = env['GEMINI_MODEL'] ?? 'gemini-3.6-flash';
   final port = int.tryParse(env['PORT'] ?? '') ?? 8080;
+  final shield = (env['SHIELD'] ?? 'on').toLowerCase() != 'off';
   final origins = (env['ALLOWED_ORIGINS'] ?? '').split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
 
   final api = Api(
-    Agents(GeminiClient(apiKey: key, model: model)),
+    Agents(
+      GeminiClient(apiKey: key, model: model),
+      shield: shield,
+    ),
     allowedOrigins: origins,
     auditLog: File('audit_log.jsonl'),
   );
   final handler = const Pipeline().addMiddleware(logRequests()).addHandler(api.handler);
   final server = await io.serve(handler, InternetAddress.loopbackIPv4, port);
-  stdout.writeln('BelegGuard API on http://${server.address.host}:${server.port} (model $model)');
+  stdout.writeln(
+    'BelegGuard API on http://${server.address.host}:${server.port} (model $model, SHIELD=${shield ? 'on' : 'off'})',
+  );
+  if (!shield) stderr.writeln('WARNING: SHIELD=off – injection guard disabled (demo only).');
 }
 
 /// Reads KEY=VALUE lines from the repo's .env (git-ignored) so the demo needs no exports.

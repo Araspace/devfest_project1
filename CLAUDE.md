@@ -73,6 +73,51 @@ Each agent = separate Gemini call with its own fixed system instruction and JSON
 - Never commit API keys.
 - UI text, code, comments and docs in English (domain terms like §14 UStG, SKR03, DATEV stay German).
 
+## Hackathon: DevFest Münster 2026 – Agentic AI
+
+**Devpost submission 14:00, live demo 15:00 (5 min).** A working demo beats feature count.
+Every change must serve one of the judging criteria; if it serves none, drop it.
+
+| Criterion | Weight | What it means here |
+|---|---|---|
+| Agentic Capability & Innovation | 40 % | Multiple agents with clear roles (worker + checker/guard); agents make real decisions (approve/reject/review, abort); structured JSON output for everything passed on; each agent states **why** (goes into the audit log) |
+| Security & Trust | 30 % | Untrusted content in delimiters (`<untrusted>…</untrusted>`), marked non-executable in system prompts; deterministic guard returns `{risk: low\|high, evidence, reason}` and blocks on `high`; actions with external effect never run directly → `pending_approval`; IDs come from server state, never from LLM output; secret/exfiltration regex on outputs; side-effect tools are mocked (local files) |
+| Scalability & Technical Execution | 30 % | Clean layout, config (model, limits, allowlists) in one place, reproducible in 3 commands, pinned dependencies, deterministic demo run (low temperature), errors caught – never a stack trace on stage |
+
+Note: the generic hackathon brief suggests Google ADK (Python). We stay on the existing Dart +
+Gemini REST stack – no rewrite. Mention Gemini and other Google tech used in the README.
+
+### Audit log & shield
+
+- `audit_log.jsonl`: every decision with `timestamp, agent, tool, args, decision (allowed|blocked|pending), rule, reason`.
+- `SHIELD=on|off` env switch so the demo can show before/after (attack blocked vs. visibly succeeding).
+  Default `on`; `off` only for the demo.
+- Demo fake secrets are clearly labelled `demo`. `.env` / `.env.local` stay in `.gitignore`.
+
+### Working mode
+
+- Priority: (1) demo runs end-to-end → (2) security layer + audit log → (3) README → (4) polish.
+  **No refactoring after 13:40.**
+- Small runnable steps; run `./tool/check.sh` (and the demo flow) after each change.
+- No new dependencies without need; no cloud deployments, no OAuth.
+- Small commits with clear messages – the repo is judged too.
+
+### README (required before submission)
+
+1. Problem in 2 sentences 2. Architecture diagram (ASCII is fine) 3. Threat model: which attacks
+are blocked and how 4. Table of security rules 5. Setup in 3 commands 6. Demo flow (which scenario
+shows what) 7. Google technologies used (Gemini, Flutter, …)
+
+### Checklist before 14:00
+
+- [ ] Demo runs 3× in a row without errors
+- [ ] Attack blocked with `SHIELD=on`, visibly succeeds with `SHIELD=off`
+- [ ] `audit_log.jsonl` shows rule + reason for every block
+- [ ] README complete
+- [ ] No real keys in the repo (`git grep -i "api_key"`)
+- [ ] Repo public, link entered on Devpost
+- [ ] Backup screen recording of the demo
+
 ## Out of scope (hackathon)
 
 Auth, Firestore, Cloud Functions, real DATEV export, dashboards – unless explicitly asked.
