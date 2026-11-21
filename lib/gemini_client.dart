@@ -1,6 +1,7 @@
 // Minimal client for the Google Gemini API (generativelanguage.googleapis.com).
 // Called straight from the browser with an API key from Google AI Studio.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -39,6 +40,8 @@ class GeminiClient {
   final String apiKey;
   final String model;
 
+  bool get _isGemini3 => model.startsWith('gemini-3');
+
   /// Sends one request with a fixed system instruction and returns the parsed
   /// JSON object the model produced.
   Future<Map<String, dynamic>> generateJson({
@@ -55,7 +58,14 @@ class GeminiClient {
       'contents': [
         {'role': 'user', 'parts': parts.map((p) => p.toJson()).toList()},
       ],
-      'generationConfig': {'responseMimeType': 'application/json', 'temperature': 0},
+      'generationConfig': {
+        'responseMimeType': 'application/json',
+        // Gemini 3 models must run at the default temperature (1.0): lower values make them
+        // loop until the request times out. Older models stay deterministic.
+        if (!_isGemini3) 'temperature': 0,
+        // Default thinking level is "high", which is far too slow for a live demo.
+        if (_isGemini3) 'thinkingConfig': {'thinkingLevel': 'low'},
+      },
     };
 
     // Retry transient errors (rate limit / overload) – common during live demos.
@@ -65,7 +75,10 @@ class GeminiClient {
         res = await http
             .post(uri,
                 headers: {'Content-Type': 'application/json', 'x-goog-api-key': apiKey}, body: jsonEncode(body))
-            .timeout(const Duration(seconds: 90));
+            .timeout(const Duration(seconds: 120));
+      } on TimeoutException {
+        // Retrying a request that already took two minutes only multiplies the wait.
+        throw GeminiException('Gemini did not answer within 120 s. Try again or pick a faster model in Settings.');
       } catch (e) {
         if (attempt == 2) throw GeminiException('Could not reach the Gemini API: $e');
         await Future.delayed(Duration(seconds: 2 << attempt));
