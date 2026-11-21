@@ -14,37 +14,46 @@ Pitch: "Qonto stores receipts. Our agents check them for legal compliance and re
 ## Stack
 
 - Flutter Web (Dart SDK ^3.13), Material, `google_fonts`
-- Google Gemini REST API directly from the browser (`lib/gemini_client.dart`), no backend
-- Default model `gemini-3.6-flash` (changeable in Settings); falls back to other Flash models on 503 / timeout
+- Dart backend (`shelf`) calls the Google Gemini REST API (`backend/lib/gemini_client.dart`); the key never reaches the browser
+- Default model `gemini-3.6-flash` (`GEMINI_MODEL` in `.env`); falls back to other Flash models on 503 / timeout
 - `excel`, `file_picker`, `http`, `web`
 
 ## Commands
 
 ```bash
-flutter pub get
-flutter run -d chrome                                   # API key is asked for in the UI
-flutter run -d chrome --dart-define=GEMINI_API_KEY=...  # demo machine, never commit the key
-flutter analyze
-flutter build web --no-tree-shake-icons
+cd backend && dart pub get && dart run bin/server.dart   # API on :8080, key from ../.env
+cd frontend && flutter pub get && flutter run -d chrome  # UI
+./tool/check.sh                                          # analyze + tests + key scan – run before every push
+cd frontend && flutter build web --no-tree-shake-icons
 ```
 
 ## Layout
 
 ```
-lib/
-  main.dart           Theme (orange / purple, Bricolage Grotesque header)
-  home_page.dart      Upload, 4-step flow, decision, invoice data, audit log
-  archive.dart        Receipt archive: filed receipts + originals (IndexedDB), index (localStorage)
-  agents.dart         Extractor → Checker → Approver → Exporter
-  gemini_client.dart  Gemini REST client
-  guard.dart          Deterministic injection guard + §14 UStG rules
-  excel_export.dart   Excel export (incl. "Audit-Log" sheet)
-  settings.dart       API key / model / auto-approve (localStorage)
-  models.dart         Data models
-web/index.html        Loading screen
-docs/PLAN.md          Hackathon plan, scope, demo script
-docs/PITCH.md         Pitch, 3-min demo script, jury Q&A
+backend/                    Dart API server (shelf) – the only part that talks to Gemini
+  bin/server.dart           Start-up: reads GEMINI_API_KEY / GEMINI_MODEL / PORT from env or ../.env
+  lib/api.dart              HTTP routes, server-side case store, approval rules, audit_log.jsonl
+  lib/agents.dart           Extractor → Checker → Approver → Exporter (prompts + hard limits)
+  lib/guard.dart            Deterministic injection guard + §14 UStG rules
+  lib/gemini_client.dart    Gemini REST client with model fallback
+  test/                     Guard, rules, agents and API tests (fake Gemini, no network)
+frontend/                   Flutter Web UI – never sees the API key
+  lib/main.dart             App entry
+  lib/theme.dart            Brand colours, theme, shared helpers (money, headline)
+  lib/pages/home_page.dart  The page: state + flow, composes the components
+  lib/components/           Global UI components, one per file (step_row, upload_card, invoice_details_card,
+                            recommendation_box, archive_card, audit_log, key_value, settings_dialog)
+  lib/services/             api_client (backend calls), archive (IndexedDB/localStorage),
+                            excel_export, settings (backend URL, auto-approve)
+  web/index.html            Loading screen
+shared/lib/models.dart      Data models + JSON used by backend and frontend
+samples/                    Demo invoices (valid, missing VAT ID, prompt injection)
+tool/check.sh               Pre-push check (analyze + tests + key scan)
+docs/                       PLAN.md (hackathon plan), PITCH.md (pitch, demo script, jury Q&A)
 ```
+
+Conventions: one UI component per file in `frontend/lib/components/` (global, reused by pages);
+pages only hold state and compose components; services hold I/O; agent logic stays in the backend.
 
 ## Agent flow
 

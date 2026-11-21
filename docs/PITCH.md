@@ -79,7 +79,8 @@ Flutter Web ──► Gemini API (generativelanguage.googleapis.com)
    └──────────────────────────── Audit log ◄──────────────────────────────────┴─► Excel (.xlsx)
 ```
 
-- **Frontend:** Flutter Web, single page, no backend
+- **Frontend:** Flutter Web, single page, global components
+- **Backend:** Dart API server (shelf) – runs the agents, holds the Gemini key, enforces the approval rules
 - **AI:** Google Gemini (`gemini-3.6-flash`, automatic fallback to other Flash models), one call per agent, JSON output
 - **Export:** `excel` package, download in the browser
 - **Code:** `lib/agents.dart` (agents), `lib/guard.dart` (rules + guard), `lib/home_page.dart` (UI)
@@ -103,6 +104,6 @@ Flutter Web ──► Gemini API (generativelanguage.googleapis.com)
 | Question | Answer |
 |---|---|
 | *What if the LLM misses the injection?* | The deterministic guard runs independently, and it can only make the result stricter. Approval is also limited by hard rules in the code. |
-| *Is the data safe?* | The invoice only goes to Google's Gemini API. There is no database, and the key stays in the browser. |
+| *Is the data safe?* | The invoice goes from the browser to our backend and from there to Google's Gemini API. The key stays on the server, the browser never sees it. There is no database; filed receipts stay in the user's browser. |
 | *Does it replace the tax advisor?* | No. It makes the pre-check and the booking suggestion faster. A human approves. |
 | *Why several agents instead of one prompt?* | Separate roles make each prompt smaller and easier to check, and give each agent least privilege: later agents never see the raw document. |

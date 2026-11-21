@@ -24,8 +24,8 @@ class FileIn extends GeminiPart {
   final Uint8List bytes;
   @override
   Map<String, dynamic> toJson() => {
-        'inline_data': {'mime_type': mimeType, 'data': base64Encode(bytes)},
-      };
+    'inline_data': {'mime_type': mimeType, 'data': base64Encode(bytes)},
+  };
 }
 
 class GeminiException implements Exception {
@@ -59,10 +59,7 @@ class GeminiClient {
 
   /// Sends one request with a fixed system instruction and returns the parsed
   /// JSON object the model produced.
-  Future<Map<String, dynamic>> generateJson({
-    required String system,
-    required List<GeminiPart> parts,
-  }) async {
+  Future<Map<String, dynamic>> generateJson({required String system, required List<GeminiPart> parts}) async {
     final contents = [
       {'role': 'user', 'parts': parts.map((p) => p.toJson()).toList()},
     ];
@@ -98,9 +95,11 @@ class GeminiClient {
       for (var attempt = 0; attempt < 2; attempt++) {
         try {
           res = await http
-              .post(uri,
-                  headers: {'Content-Type': 'application/json', 'x-goog-api-key': apiKey},
-                  body: jsonEncode(body(m, thinkingLevel)))
+              .post(
+                uri,
+                headers: {'Content-Type': 'application/json', 'x-goog-api-key': apiKey},
+                body: jsonEncode(body(m, thinkingLevel)),
+              )
               .timeout(_timeout);
         } on TimeoutException {
           res = null;
@@ -129,7 +128,8 @@ class GeminiClient {
     final r = res;
     if (r == null) {
       throw GeminiException(
-          'All Gemini models are busy or unreachable right now – try again in a minute.\n${problems.join('\n')}');
+        'All Gemini models are busy or unreachable right now – try again in a minute.\n${problems.join('\n')}',
+      );
     }
 
     Object? decoded;

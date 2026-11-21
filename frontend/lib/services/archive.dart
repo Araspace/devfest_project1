@@ -13,7 +13,7 @@ import 'dart:typed_data';
 
 import 'package:web/web.dart' as web;
 
-import 'models.dart';
+import 'package:belegguard_shared/models.dart';
 
 class Archive {
   static const _indexKey = 'bg_archive';
@@ -24,19 +24,19 @@ class Archive {
   static Future<web.IDBDatabase>? _dbFuture;
 
   static Future<web.IDBDatabase> _db() => _dbFuture ??= () {
-        final c = Completer<web.IDBDatabase>();
-        final req = web.window.indexedDB.open(_dbName, 1);
-        req.onupgradeneeded = ((web.Event _) {
-          final db = req.result as web.IDBDatabase;
-          if (!db.objectStoreNames.contains(_store)) db.createObjectStore(_store);
-        }).toJS;
-        req.onsuccess = ((web.Event _) => c.complete(req.result as web.IDBDatabase)).toJS;
-        req.onerror = ((web.Event _) {
-          _dbFuture = null;
-          c.completeError(StateError('IndexedDB unavailable: ${req.error?.message ?? 'unknown error'}'));
-        }).toJS;
-        return c.future;
-      }();
+    final c = Completer<web.IDBDatabase>();
+    final req = web.window.indexedDB.open(_dbName, 1);
+    req.onupgradeneeded = ((web.Event _) {
+      final db = req.result as web.IDBDatabase;
+      if (!db.objectStoreNames.contains(_store)) db.createObjectStore(_store);
+    }).toJS;
+    req.onsuccess = ((web.Event _) => c.complete(req.result as web.IDBDatabase)).toJS;
+    req.onerror = ((web.Event _) {
+      _dbFuture = null;
+      c.completeError(StateError('IndexedDB unavailable: ${req.error?.message ?? 'unknown error'}'));
+    }).toJS;
+    return c.future;
+  }();
 
   static Future<JSAny?> _request(web.IDBRequest r) {
     final c = Completer<JSAny?>();

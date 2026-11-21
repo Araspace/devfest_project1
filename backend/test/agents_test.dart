@@ -1,21 +1,26 @@
 // Agent decision logic with a fake Gemini client: no network, deterministic.
 // Covers the hard limits that no LLM answer may override.
 
-import 'package:beleg_guard/agents.dart';
-import 'package:beleg_guard/gemini_client.dart';
-import 'package:beleg_guard/models.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:belegguard_backend/agents.dart';
+import 'package:belegguard_backend/gemini_client.dart';
+import 'package:belegguard_shared/models.dart';
+import 'package:test/test.dart';
 
 /// Returns a fixed JSON answer instead of calling the API.
 class FakeGemini extends GeminiClient {
   FakeGemini(this.answer) : super(apiKey: 'test', model: 'fake');
   final Map<String, dynamic> answer;
   @override
-  Future<Map<String, dynamic>> generateJson({required String system, required List<GeminiPart> parts}) async =>
-      answer;
+  Future<Map<String, dynamic>> generateJson({required String system, required List<GeminiPart> parts}) async => answer;
 }
 
-const okCheck = {'status': 'ok', 'issues': [], 'injection_detected': false, 'injection_evidence': [], 'reasoning': 'fine'};
+const okCheck = {
+  'status': 'ok',
+  'issues': [],
+  'injection_detected': false,
+  'injection_evidence': [],
+  'reasoning': 'fine',
+};
 
 InvoiceData invoice({String raw = 'Rechnung', List<String> suspicious = const [], String? vatId = 'DE287654321'}) =>
     InvoiceData(
@@ -40,7 +45,12 @@ Future<CheckResult> check(InvoiceData inv, [Map<String, dynamic> answer = okChec
     Agents(FakeGemini(answer)).check(inv);
 
 CheckResult result(CheckStatus status, [List<Issue> issues = const []]) => CheckResult(
-    status: status, issues: issues, injectionDetected: status == CheckStatus.blocked, injectionEvidence: const [], reasoning: '');
+  status: status,
+  issues: issues,
+  injectionDetected: status == CheckStatus.blocked,
+  injectionEvidence: const [],
+  reasoning: '',
+);
 
 void main() {
   group('Checker', () {
@@ -55,7 +65,11 @@ void main() {
     });
 
     test('LLM-detected injection is blocked', () async {
-      final r = await check(invoice(), {...okCheck, 'injection_detected': true, 'injection_evidence': ['psst']});
+      final r = await check(invoice(), {
+        ...okCheck,
+        'injection_detected': true,
+        'injection_evidence': ['psst'],
+      });
       expect(r.status, CheckStatus.blocked);
     });
 

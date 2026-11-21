@@ -71,23 +71,26 @@ own fixed system instruction and JSON output. Default model: `gemini-3.6-flash` 
 
 ### API key protection
 
-The app has no backend, so the Gemini key reaches the browser. For the hackathon we limit the damage:
+The Gemini key lives **only on the backend** (`.env` / environment). The browser talks to the BelegGuard
+API and never sees the key or the raw invoice text the Checker works on.
 
-1. **API restriction:** in Google Cloud Console → APIs & Services → Credentials, the key only allows the *Generative Language API*.
-2. **HTTP referrer restriction:** the key only works from the demo origin (e.g. `http://localhost:*`).
-3. **Never in the repo:** the key comes from the UI (stored in the browser) or from a local `.env`
-   (`GEMINI_API_KEY=…`, git-ignored) via `flutter run -d chrome --dart-define-from-file=.env`.
-   Don't host a build made with the key – it ends up in the compiled JavaScript.
-4. **Rotate:** the demo key is deleted after the event.
+1. **Server-side key:** `GEMINI_API_KEY` is read by `backend/bin/server.dart`; it is never sent to the client.
+2. **Server-side rules:** the backend refuses to export blocked or unapproved invoices (HTTP 403), whatever
+   the browser sends. Uploads are limited to PDF / images / text, max 10 MB.
+3. **CORS:** only localhost origins (or `ALLOWED_ORIGINS`) may call the API.
+4. **Audit log:** every agent decision goes to `backend/audit_log.jsonl`
+   (`timestamp, case, agent, action, decision, rule, reason`).
+5. **Never in the repo:** `.env` and `audit_log.jsonl` are git-ignored; `tool/check.sh` scans for keys.
 
-**Production:** the key moves behind a small backend proxy (Cloud Run or Firebase Functions) with user
-login; the browser only talks to the proxy. The agent logic stays the same.
+**Production next steps:** deploy the backend to Cloud Run, add user login, restrict the key to the
+Generative Language API, persist cases and the audit log (e.g. Firestore). The agent logic stays the same.
 
 ## Google technologies
 
 - **Gemini API** (Flash models, `generativelanguage.googleapis.com`) for all four agents, with JSON output
   and automatic fallback to other Flash models when one is overloaded
 - **Flutter Web** (Dart) for the UI, one codebase that can also ship to iOS / Android
+- **Dart backend** (shelf) – same language and shared models as the UI, ready for Cloud Run
 - **Google AI Studio** for the API key; Gemini / Antigravity as pair programmer while building
 
 ## Demo receipts
@@ -104,51 +107,59 @@ Drop them into the app in this order for the 3-minute demo.
 
 ## Run
 
-1. Get a Gemini API key at https://aistudio.google.com/apikey
-2. Start the app and paste the key when asked (stored only in your browser):
+1. Put the Gemini key into `.env` in the repo root (git-ignored; key from https://aistudio.google.com/apikey):
 
-```bash
-flutter run -d chrome
+```
+GEMINI_API_KEY=your-key
+GEMINI_MODEL=gemini-3.6-flash
 ```
 
-Or bake it in for a demo machine (never commit it):
+2. Start the backend and the frontend (two terminals):
 
 ```bash
-flutter run -d chrome --dart-define=GEMINI_API_KEY=your-key
+cd backend && dart pub get && dart run bin/server.dart     # API on http://localhost:8080
+cd frontend && flutter pub get && flutter run -d chrome    # UI, talks to the backend
 ```
 
-Settings (top right): Gemini model, and "Let the Approver agent decide".
+Settings (top right): backend URL and "Let the Approver agent decide".
 
-Checks before every push (analyze + 22 unit tests + API-key scan):
+Checks before every push (analyze + tests for both parts + API-key scan):
 
 ```bash
 ./tool/check.sh                        # run manually
 git config core.hooksPath .githooks    # once per clone: run it automatically on git push
 ```
 
-The tests (`test/`) cover the guard, the §14 UStG rules and the agents' hard limits with a fake Gemini
-client – no network, no key needed.
+The tests (`backend/test/`) cover the guard, the §14 UStG rules, the agents' hard limits and the API's
+approval rules with a fake Gemini client – no network, no key needed.
 
-Build for hosting:
+Build the frontend for hosting (point it at the backend with `--dart-define=BACKEND_URL=https://…`):
 
 ```bash
-flutter build web --no-tree-shake-icons
+cd frontend && flutter build web --no-tree-shake-icons
 ```
 
 ## Project layout
 
 ```
-lib/
-  main.dart           Theme (orange / purple, Bricolage Grotesque header)
-  home_page.dart      Upload, 4-step flow, decision, invoice data, audit log
-  archive.dart        Receipt archive: filed receipts + originals (IndexedDB), index (localStorage)
-  agents.dart         Extractor, Checker, Approver, Exporter
-  gemini_client.dart  Gemini REST client
-  guard.dart          Injection guard + §14 UStG rules
-  excel_export.dart   Excel export
-  settings.dart       API key / model / auto-approve (localStorage)
-  models.dart         Data models
-samples/              Demo invoices (valid, missing VAT ID, prompt injection)
-docs/PLAN.md          Hackathon plan
-docs/PITCH.md         Pitch, demo script, jury Q&A
+backend/                    Dart API server (shelf) – the only part that talks to Gemini
+  bin/server.dart           Start-up: reads GEMINI_API_KEY / GEMINI_MODEL / PORT from env or ../.env
+  lib/api.dart              HTTP routes, server-side case store, approval rules, audit_log.jsonl
+  lib/agents.dart           Extractor → Checker → Approver → Exporter (prompts + hard limits)
+  lib/guard.dart            Deterministic injection guard + §14 UStG rules
+  lib/gemini_client.dart    Gemini REST client with model fallback
+  test/                     Guard, rules, agents and API tests (fake Gemini, no network)
+frontend/                   Flutter Web UI – never sees the API key
+  lib/main.dart             App entry
+  lib/theme.dart            Brand colours, theme, shared helpers (money, headline)
+  lib/pages/home_page.dart  The page: state + flow, composes the components
+  lib/components/           Global UI components, one per file (step_row, upload_card, invoice_details_card,
+                            recommendation_box, archive_card, audit_log, key_value, settings_dialog)
+  lib/services/             api_client (backend calls), archive (IndexedDB/localStorage),
+                            excel_export, settings (backend URL, auto-approve)
+  web/index.html            Loading screen
+shared/lib/models.dart      Data models + JSON used by backend and frontend
+samples/                    Demo invoices (valid, missing VAT ID, prompt injection)
+tool/check.sh               Pre-push check (analyze + tests + key scan)
+docs/                       PLAN.md (hackathon plan), PITCH.md (pitch, demo script, jury Q&A)
 ```

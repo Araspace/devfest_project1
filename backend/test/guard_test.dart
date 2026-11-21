@@ -4,27 +4,27 @@
 
 import 'dart:io';
 
-import 'package:beleg_guard/guard.dart';
-import 'package:beleg_guard/models.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:belegguard_backend/guard.dart';
+import 'package:belegguard_shared/models.dart';
+import 'package:test/test.dart';
 
-String sample(String name) => File('samples/$name.txt').readAsStringSync();
+String sample(String name) => File('../samples/$name.txt').readAsStringSync();
 
 InvoiceData valid({String? vatId = 'DE287654321', double gross = 535.50}) => InvoiceData(
-      supplierName: 'Bürobedarf Weber GmbH',
-      supplierAddress: 'Hafenweg 12, 48155 Münster',
-      recipientName: 'Muster Consulting UG',
-      recipientAddress: 'Ludgeristraße 5, 48143 Münster',
-      vatId: vatId,
-      invoiceNumber: 'RE-2026-1142',
-      invoiceDate: '2026-11-14',
-      deliveryDate: '2026-11-12',
-      description: '2x Bürostuhl, 1x Monitorarm',
-      net: 450.00,
-      vat: 85.50,
-      gross: gross,
-      vatRate: 19,
-    );
+  supplierName: 'Bürobedarf Weber GmbH',
+  supplierAddress: 'Hafenweg 12, 48155 Münster',
+  recipientName: 'Muster Consulting UG',
+  recipientAddress: 'Ludgeristraße 5, 48143 Münster',
+  vatId: vatId,
+  invoiceNumber: 'RE-2026-1142',
+  invoiceDate: '2026-11-14',
+  deliveryDate: '2026-11-12',
+  description: '2x Bürostuhl, 1x Monitorarm',
+  net: 450.00,
+  vat: 85.50,
+  gross: gross,
+  vatRate: 19,
+);
 
 void main() {
   group('InjectionGuard on samples', () {
