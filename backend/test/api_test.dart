@@ -13,7 +13,12 @@ import 'package:test/test.dart';
 class FakeGemini extends GeminiClient {
   FakeGemini() : super(apiKey: 'test', model: 'fake');
   @override
-  Future<Map<String, dynamic>> generateJson({required String system, required List<GeminiPart> parts}) async => {
+  Future<Map<String, dynamic>> generateJson({
+    required String system,
+    required List<GeminiPart> parts,
+    List<Map<String, Object?>>? tools,
+    Map<String, Object?> Function(String name, Map<String, Object?> args)? onToolCall,
+  }) async => {
     'supplier_name': 'Bürobedarf Weber GmbH',
     'supplier_address': 'Hafenweg 12, 48155 Münster',
     'recipient_name': 'Muster Consulting UG',
@@ -93,5 +98,16 @@ void main() {
       'data_base64': 'AA==',
     });
     expect(code, 415);
+  });
+
+  test('second upload of a booked invoice is flagged as duplicate', () async {
+    final first = await upload('1_valid_invoice');
+    await post('api/cases/$first/check', {});
+    await post('api/cases/$first/recommend', {});
+    expect((await post('api/cases/$first/export', {'approved_by': 'human'})).$1, 200);
+    final again = await upload('1_valid_invoice');
+    final (_, chk) = await post('api/cases/$again/check', {});
+    expect(chk['status'], 'warning');
+    expect([for (final i in chk['issues'] as List) i['code']], contains('DUPLICATE_INVOICE'));
   });
 }

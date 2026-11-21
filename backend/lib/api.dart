@@ -106,6 +106,18 @@ class Api {
     final inv = c.invoice;
     if (inv == null) return _error(409, 'Extract first');
     c.check = await agents.check(inv);
+    for (final t in agents.tools.drainCalls()) {
+      _audit(
+        id,
+        'checker',
+        t.allowed ? 'allowed' : 'blocked',
+        'tool ${t.name} (${t.caller})',
+        'result: ${jsonEncode(t.result)}',
+        rule: t.allowed ? 'READ_ONLY_TOOL' : 'TOOL_ALLOWLIST',
+        tool: t.name,
+        args: t.args,
+      );
+    }
     final blocked = c.check!.status == CheckStatus.blocked;
     _audit(
       id,
@@ -180,6 +192,7 @@ class Api {
       tool: 'export',
       args: {'approved_by': by, 'account': booking.account},
     );
+    agents.tools.markBooked(inv.supplierName, inv.invoiceNumber); // enables the duplicate check
     _cases.remove(id); // done – nothing kept on the server
     return _json(booking.toJson());
   }
