@@ -51,7 +51,10 @@ Preparation: app open, Gemini key saved, three invoices ready on the desktop.
 
 **Fallback:** if the Wi-Fi fails → show screenshots of the three runs and the exported Excel file.
 
-### Test invoices to prepare
+### Test invoices
+
+Ready-made in `samples/` (`.txt` and `.pdf`): `1_valid_invoice`, `2_missing_vat_id`,
+`3_prompt_injection`. The `.txt` files are the safest choice for the live demo.
 
 1. **Valid:** complete German invoice, 19 % VAT, net + VAT = gross.
 2. **Missing VAT ID:** same as 1, but without USt-IdNr. and Steuernummer, gross > 250 €.
