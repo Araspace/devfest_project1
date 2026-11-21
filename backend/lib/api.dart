@@ -54,7 +54,7 @@ class Api {
     final seg = req.url.pathSegments;
     try {
       if (req.method == 'GET' && seg.join('/') == 'api/health') {
-        return _json({'ok': true, 'model': agents.gemini.model});
+        return _json({'ok': true, 'model': agents.gemini.model, 'shield': agents.shield});
       }
       if (req.method == 'POST' && seg.length == 2 && seg[0] == 'api' && seg[1] == 'cases') {
         return await _upload(req);
@@ -90,7 +90,15 @@ class Api {
     final c = _Case(UploadedDoc(name, mime, bytes));
     _cases[id] = c;
     c.invoice = await agents.extract(c.doc);
-    _audit(id, 'extractor', 'allowed', 'extracted ${c.invoice!.supplierName ?? '?'}', c.invoice!.reasoning);
+    _audit(
+      id,
+      'extractor',
+      'allowed',
+      'extracted ${c.invoice!.supplierName ?? '?'}',
+      c.invoice!.reasoning,
+      tool: 'gemini.extract',
+      args: {'file': name, 'mime': mime, 'bytes': bytes.length},
+    );
     return _json({'id': id, 'invoice': c.invoice!.toJson()});
   }
 
@@ -106,6 +114,10 @@ class Api {
       c.check!.status.name,
       blocked ? c.check!.injectionEvidence.join(' | ') : c.check!.reasoning,
       rule: blocked ? 'PROMPT_INJECTION' : null,
+      tool: 'gemini.check+guard',
+      args: {
+        'issues': [for (final i in c.check!.issues) i.code],
+      },
     );
     return _json(c.check!.toJson());
   }
@@ -115,7 +127,16 @@ class Api {
     final chk = c.check;
     if (inv == null || chk == null) return _error(409, 'Check first');
     c.recommendation = await agents.recommend(inv, chk);
-    _audit(id, 'approver', 'pending', c.recommendation!.decision, c.recommendation!.reasoning);
+    _audit(
+      id,
+      'approver',
+      'pending',
+      c.recommendation!.decision,
+      c.recommendation!.reasoning,
+      rule: 'APPROVAL_REQUIRED',
+      tool: 'gemini.recommend',
+      args: {'check_status': chk.status.name},
+    );
     return _json(c.recommendation!.toJson());
   }
 
@@ -136,27 +157,56 @@ class Api {
       denied = 'Missing approval';
     }
     if (denied != null) {
-      _audit(id, 'exporter', 'blocked', 'export denied', denied, rule: 'APPROVAL_REQUIRED');
+      _audit(
+        id,
+        'exporter',
+        'blocked',
+        'export denied',
+        denied,
+        rule: 'APPROVAL_REQUIRED',
+        tool: 'export',
+        args: {'approved_by': by},
+      );
       return _error(403, denied);
     }
 
     final booking = await agents.export(inv);
-    _audit(id, 'exporter', 'allowed', 'booked ${booking.account} (approved by $by)', booking.reasoning);
+    _audit(
+      id,
+      'exporter',
+      'allowed',
+      'booked ${booking.account} (approved by $by)',
+      booking.reasoning,
+      tool: 'export',
+      args: {'approved_by': by, 'account': booking.account},
+    );
     _cases.remove(id); // done – nothing kept on the server
     return _json(booking.toJson());
   }
 
-  void _audit(String caseId, String agent, String decision, String action, String reason, {String? rule}) {
+  void _audit(
+    String caseId,
+    String agent,
+    String decision,
+    String action,
+    String reason, {
+    String? rule,
+    String? tool,
+    Map<String, Object?> args = const {},
+  }) {
     final log = auditLog;
     if (log == null) return;
     final entry = {
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'case': caseId,
       'agent': agent,
+      'tool': ?tool,
+      'args': args,
       'action': action,
       'decision': decision,
       'rule': ?rule,
       'reason': reason,
+      'shield': agents.shield ? 'on' : 'off',
     };
     log.writeAsStringSync('${jsonEncode(entry)}\n', mode: FileMode.append);
   }

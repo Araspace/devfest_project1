@@ -20,10 +20,13 @@ class ApiClient {
 
   static const _timeout = Duration(seconds: 150);
 
-  Future<String?> health() async {
+  /// Returns the backend's model and SHIELD state, or null if it is not reachable.
+  Future<({String model, bool shield})?> health() async {
     try {
       final res = await http.get(Uri.parse('$baseUrl/api/health')).timeout(const Duration(seconds: 5));
-      return res.statusCode == 200 ? (jsonDecode(res.body) as Map)['model']?.toString() : null;
+      if (res.statusCode != 200) return null;
+      final j = jsonDecode(res.body) as Map;
+      return (model: j['model']?.toString() ?? '?', shield: j['shield'] != false);
     } catch (_) {
       return null;
     }
